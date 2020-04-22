@@ -1,0 +1,37 @@
+/* header title area font */
+.main-header .logo {
+  font-family: "Corbel", Times, "Times New Roman", serif;
+  font-weight: bold;
+  font-size: 24px;
+
+  
+}
+
+
+/* background color of header (logo part) */
+.skin-blue .main-header .logo {
+          background-color: steelblue; /* backgorund color of the logo header part */
+          color: white; /* title text color */
+          height: 80px;
+
+        }
+        
+        
+/* change the background color of header (logo part) when mouse hover */
+.skin-blue .main-header .logo:hover {
+          background-color: steelblue; /* backgorund color of the logo header part on mouse hover */
+          color:black;
+        }
+  
+/* Edit the below for the header title hyperlink */
+.skin-blue .main-header .logo>a {
+            color: white; /* color of the hyperlink text */
+
+          
+        }
+        
+/* Edit the below to get the header title hyperlink hover effect */  
+.skin-blue .main-header .logo>a:hover {
+          color: yellow;  /* color of the hyperlink text on mouse hover */
+          
+        }
