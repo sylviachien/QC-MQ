@@ -1,11 +1,18 @@
-# app_8 v1
+# app_10
 
 options(shiny.maxRequestSize=10000*1024^2)
+library(BiocManager)
 options(repos = BiocManager::repositories())
+
 
 ###################################################################################
 # load libraries
+library(GenomicAlignments)
+library(knitr)
+library(kableExtra)
 library(colorspace)
+library(shinyalert)
+library(shinyWidgets)
 library(shinyBS)
 library(tools)
 library(shinyjs)
@@ -28,6 +35,12 @@ server <- function(input, output, session){
   source("functions.R")
   shinyjs::useShinyjs()
   
+  observeEvent(input$doe_demo_table, {
+    demo_doe <- read.table("demo_run_file/doe_demo", sep = "\t", header = TRUE)
+    demo_doe <- demo_doe[1:11,]
+    output$doe_example <- renderTable(demo_doe, striped = TRUE, bordered = TRUE)
+  })
+  
   ##################################
   # quick check for uploaded files #
   ##################################
@@ -41,7 +54,7 @@ server <- function(input, output, session){
       createAlert(session, anchorId = "alert1", alertId = "a1", style = "danger", content =  paste0("The uploaded file '", pg_name, "' is NOT 'proteinGroups.txt'!"))
       qc_allow_pg = qc_allow + 1
     }else{
-      closeAlert(session, "a1")
+      shinyBS::closeAlert(session, "a1")
       qc_allow_pg = 0
     }
   })
@@ -52,7 +65,7 @@ server <- function(input, output, session){
     if(!is.null(pt_file) && pt_name!="peptides.txt"){
       createAlert(session, anchorId = "alert2", alertId = "a2", style = "danger", content =  paste0("The uploaded file '", pt_name, "' is NOT 'peptides.txt'!"))
     }else{
-      closeAlert(session, "a2")
+      shinyBS::closeAlert(session, "a2")
     }
   })
   ### 3 msms.txt
@@ -62,7 +75,7 @@ server <- function(input, output, session){
     if(!is.null(ms_file) && ms_name!="msms.txt"){
       createAlert(session, anchorId = "alert3", alertId = "a3", style = "danger", content =  paste0("The uploaded file '", ms_name, "' is NOT 'msms.txt'!"))
     }else{
-      closeAlert(session, "a3")
+      shinyBS::closeAlert(session, "a3")
     }
   })
   ### 4 summary.txt
@@ -72,7 +85,7 @@ server <- function(input, output, session){
     if(!is.null(sum_file) && sum_name!="summary.txt"){
       createAlert(session, anchorId = "alert4", alertId = "a4", style = "danger", content =  paste0("The uploaded file '", sum_name, "' is NOT 'summary.txt'!"))
     }else{
-      closeAlert(session, "a4")
+      shinyBS::closeAlert(session, "a4")
     }
   })
   ### 5 doe.txt
@@ -80,6 +93,10 @@ server <- function(input, output, session){
     if(isTruthy(input$doe_file)){
       doe_file <- input$doe_file$datapath
       doe <- read.table(doe_file, sep = input$sep, header = T)
+      
+      colnames(doe) <- gsub(" ", ".", colnames(doe))
+      colnames(doe) <- tolower(colnames(doe))
+      doe$type <- tolower(doe$type)
       # modify the sample.id if necessary
       doe$sample.id <- gsub(" ", ".", doe$sample.id)
       doe$sample.id <- gsub("-", ".", doe$sample.id)
@@ -106,13 +123,13 @@ server <- function(input, output, session){
                     append = TRUE)
       }else{
         if(noMatchCol==4){
-          closeAlert(session, "a5a")
+          shinyBS::closeAlert(session, "a5a")
         }
       }
 
       # check if samples listed in DOE are existing in proteinGroups file
       if(isTruthy(input$pg_file)){
-        closeAlert(session, "a10")
+        shinyBS::closeAlert(session, "a10")
         pg_file <- input$pg_file$datapath
         pg_data <- read.table(pg_file, header = T, sep = "\t", stringsAsFactors = F, quote = "\"", comment.char = "")
         pg_data_colname <- colnames(pg_data)
@@ -146,7 +163,7 @@ server <- function(input, output, session){
                       content = paste0(notMatchSample_list1, " in DOE is not found in proteinGroups data file! "),
                       append = TRUE)
         }else{
-          closeAlert(session, "a5b")
+          shinyBS::closeAlert(session, "a5b")
         }
         
         # 2. if DOE has less samples than proteinGroups
@@ -166,7 +183,7 @@ server <- function(input, output, session){
                       content = paste0(notMatchSample_list2, " in proteinGroups data is not found in DOE file! "),
                       append = TRUE)
         }else{
-          closeAlert(session, "a5c")
+          shinyBS::closeAlert(session, "a5c")
         }
         
         # 1+2 if DOE and proteinGroups are not consistent
@@ -176,7 +193,7 @@ server <- function(input, output, session){
                       style = "danger",
                       content = "Data in DOE is not consistent with data in proteinGroups.txt")
         }else{
-          closeAlert(session, "a5d")
+          shinyBS::closeAlert(session, "a5d")
         }
       }else{
         createAlert(session, "alert10", alertId = "a10",
@@ -196,6 +213,23 @@ server <- function(input, output, session){
   ####################################
   # quick check for input parameters #
   ####################################
+  observeEvent(input$custom_spikeinRun,{
+    if(isTruthy(input$pg_file)){
+      pg_file <- input$pg_file$datapath
+      pg <- read.table(pg_file, header = T, sep = "\t",
+                       stringsAsFactors = F, quote = "\"",
+                       comment.char = "")
+      if(!custom_spike %in% pg$Protein.IDs){
+        createAlert(session, "alert11", alertId = "a11",
+                    style = "danger",
+                    content = "The Protein.ID(s) is not found in the data!")
+      }else{
+        shinyBS::closeAlert(session, "a11")
+      }
+      
+    }
+  })
+  
   parameter <- reactive({
     ### LFQRun
     LFQRun <- input$LFQRun
@@ -219,26 +253,31 @@ server <- function(input, output, session){
     spikeinRun <- input$spikeinRun
     if(isTruthy(input$pg_file)){
       pg_file <- input$pg_file$datapath
-      pg_data <- read.table(pg_file, header = T, sep = "\t",
+      pg <- read.table(pg_file, header = T, sep = "\t",
                             stringsAsFactors = F, quote = "\"",
                             comment.char = "")
-      if(length(pg_data$Protein.IDs[pg_data$Protein.IDs %in% "P00000"])==0){
+      if(length(pg$Protein.IDs[pg$Protein.IDs %in% "P00000"])==0){
         spikeinRun <- "N"
         output$spike_descrp <- renderText({
           paste0("No spike-in is added in this experiment.")
         })
       }else{
         spikeinRun <- "Y"
+        output$spike_descrp <- renderText({
+          paste0("")
+        })
       }
     }
+    
     ### prefix
     prefix <- input$prefix
     
     ### exp_title
     if(isTruthy(input$exp_title)){
-      exp_tilte <- input$exp_title
+      exp_title <- input$exp_title
+      exp_title <- gsub(" ","_", exp_title)
     }else{
-      exp_tile <- ""
+      exp_title <- "QC-MQ"
     }
   })
   
@@ -257,31 +296,40 @@ server <- function(input, output, session){
     
     parsed_pg <- process_pg(pg)
     
+    # check spikein
+    if(length(pg$Protein.IDs[pg$Protein.IDs %in% "P00000"])==0){
+      spikeinRun <- "N"
+      output$spike_descrp <- renderText({
+        paste0("No spike-in is added in this experiment.")
+      })
+    }else{
+      spikeinRun <- "Y"
+      output$spike_descrp <- renderText({
+        paste0("")
+      })
+    }
+    
+    # check LFQ
+    pg_lfq_col <- parsed_pg %>% 
+      select(starts_with("LFQ"))
+    if(length(colnames(pg_lfq_col))>0){
+      LFQRun <- "Y"
+    }else{
+      LFQRun <- "N"
+    }
     ################################################################################################
     # datasets for download
-    
+    ## raw
     table_log2_raw <- getLog2Table(parsed_pg, "raw")
-    table_log2_lfq <- getLog2Table(parsed_pg, "lfq")
     table_log2_clean_raw <- getLog2CleanTable(parsed_pg, "raw")
-    table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
     table_contam_log2_raw <- getLog2ContamTable(parsed_pg, "raw")
-    table_contam_log2_lfq <- getLog2ContamTable(parsed_pg, "lfq")
     
     output$dtable_log2_raw <- downloadHandler(
       filename = function(){
         paste0(input$prefix,"_log2_raw_data_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(table_log2_raw, file, sep = "\t")
-      }
-    )
-    
-    output$dtable_log2_lfq <- downloadHandler(
-      filename = function(){
-        paste0(input$prefix,"_log2_lfq_data_",Sys.Date(),".tsv")
-      },
-      content = function(file){
-        write.table(table_log2_lfq, file, sep = "\t")
+        write.table(table_log2_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -290,16 +338,7 @@ server <- function(input, output, session){
         paste0(input$prefix,"_log2_raw_clean_data_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(table_log2_clean_raw, file, sep = "\t")
-      }
-    )
-    
-    output$dtable_log2_clean_lfq <- downloadHandler(
-      filename = function(){
-        paste0(input$prefix,"_log2_lfq_clean_data_",Sys.Date(),".tsv")
-      },
-      content = function(file){
-        write.table(table_log2_clean_lfq, file, sep = "\t")
+        write.table(table_log2_clean_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -308,49 +347,60 @@ server <- function(input, output, session){
         paste0(input$prefix,"_log2_raw_contaminant_data_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(table_contam_log2_raw, file, sep = "\t")
+        write.table(table_contam_log2_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
-    output$dtable_contam_log2_lfq <- downloadHandler(
-      filename = function(){
-        paste0(input$prefix,"_log2_lfq_contaminant_data_",Sys.Date(),".tsv")
-      },
-      content = function(file){
-        write.table(table_contam_log2_lfq, file, sep = "\t")
-      }
-    )
+    ## lfq
+    if(LFQRun=="Y"){
+      table_log2_lfq <- getLog2Table(parsed_pg, "lfq")
+      table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
+      table_contam_log2_lfq <- getLog2ContamTable(parsed_pg, "lfq")
+      
+      output$dtable_log2_lfq <- downloadHandler(
+        filename = function(){
+          paste0(input$prefix,"_log2_lfq_data_",Sys.Date(),".tsv")
+        },
+        content = function(file){
+          write.table(table_log2_lfq, file, sep = "\t", row.names = FALSE)
+        }
+      )
+      
+      output$dtable_log2_clean_lfq <- downloadHandler(
+        filename = function(){
+          paste0(input$prefix,"_log2_lfq_clean_data_",Sys.Date(),".tsv")
+        },
+        content = function(file){
+          write.table(table_log2_clean_lfq, file, sep = "\t", row.names = FALSE)
+        }
+      )
+      
+      output$dtable_contam_log2_lfq <- downloadHandler(
+        filename = function(){
+          paste0(input$prefix,"_log2_lfq_contaminant_data_",Sys.Date(),".tsv")
+        },
+        content = function(file){
+          write.table(table_contam_log2_lfq, file, sep = "\t", row.names = FALSE)
+        }
+      )
+      
+    }
     
+
     ##########################################################################################################
     # expCheck - spikein
     
     if(length(parsed_pg$Protein.IDs[parsed_pg$Protein.IDs %in% "P00000"])!=0){
+      ## raw
       spike_dat_raw <- getSpikeInfo(parsed_pg, "raw")
-      spike_dat_lfq <- getSpikeInfo(parsed_pg, "lfq")
-      
       spike_raw_log2_mean <- mean(spike_dat_raw$log2.intensity)
       spike_raw_log2_sd <- sd(spike_dat_raw$log2.intensity)
-      
-      spike_lfq_log2_mean <- mean(spike_dat_lfq$log2.intensity)
-      spike_lfq_log2_sd <- sd(spike_dat_lfq$log2.intensity)
-      
       cutline_below_raw = spike_raw_log2_mean - 2*spike_raw_log2_sd
       cutline_above_raw = spike_raw_log2_mean + 2*spike_raw_log2_sd
-      
-      cutline_below_lfq = spike_lfq_log2_mean - 2*spike_lfq_log2_sd
-      cutline_above_lfq = spike_lfq_log2_mean + 2*spike_lfq_log2_sd
-      
       below_raw <- getSpikeBelow2sdSample(spike_dat_raw)
-      below_lfq <- getSpikeBelow2sdSample(spike_dat_lfq)
-      
       above_raw <- getSpikeAbove2sdSample(spike_dat_raw)
-      above_lfq <- getSpikeAbove2sdSample(spike_dat_lfq)
-      
       spike_dat_raw <- spike_dat_raw %>% 
         mutate(outlier = ifelse(sample %in% below_raw$sample | sample %in% above_raw$sample, "#FF6666", "#00CCCC"))
-      
-      spike_dat_lfq <- spike_dat_lfq %>% 
-        mutate(outlier = ifelse(sample %in% below_lfq$sample | sample %in% above_lfq$sample, "#FF6666", "#00CCCC"))
       
       output$spike_plot_raw <- renderPlotly({
         n = nrow(spike_dat_raw)
@@ -358,16 +408,6 @@ server <- function(input, output, session){
           add_segments(y=cutline_above_raw, yend=cutline_above_raw, x=spike_dat_raw$sample[1], xend=spike_dat_raw$sample[n], color=I("gray"), name="Mean+2SD") %>% 
           add_segments(y=spike_raw_log2_mean, yend=spike_raw_log2_mean, x=spike_dat_raw$sample[1], xend=spike_dat_raw$sample[n], color=I("black"), name="Mean") %>% 
           add_segments(y=cutline_below_raw, yend=cutline_below_raw, x=spike_dat_raw$sample[1], xend=spike_dat_raw$sample[n], color=I("gray"), name="Mean-2SD") 
-        
-      })
-      
-      output$spike_plot_lfq <- renderPlotly({
-        n = nrow(spike_dat_lfq)
-        plot_ly(spike_dat_lfq, x=~sample, y=~log2.intensity, type = "scatter", color =~ I(outlier), name="Spikein") %>% 
-          add_segments(y=cutline_above_lfq, yend=cutline_above_lfq, x=spike_dat_lfq$sample[1], xend=spike_dat_lfq$sample[n], color=I("gray"), name="Mean+2SD") %>% 
-          add_segments(y=spike_lfq_log2_mean, yend=spike_lfq_log2_mean, x=spike_dat_lfq$sample[1], xend=spike_dat_lfq$sample[n], color=I("black"), name="Mean") %>% 
-          add_segments(y=cutline_below_lfq, yend=cutline_below_lfq, x=spike_dat_lfq$sample[1], xend=spike_dat_lfq$sample[n], color=I("gray"), name="Mean-2SD") 
-        
       })
       
       output$spikelow_raw <- renderTable({
@@ -378,15 +418,39 @@ server <- function(input, output, session){
         above_raw %>% select(sample, log2.intensity)
       })
       
-      output$spikelow_lfq <- renderTable({
-        below_lfq %>% select(sample, log2.intensity)
-      })
-      
-      output$spikehigh_lfq <- renderTable({
-        above_lfq %>% select(sample, log2.intensity)
-      })
+      ## lfq
+      if(LFQRun=="Y"){
+        spike_dat_lfq <- getSpikeInfo(parsed_pg, "lfq")
+        spike_lfq_log2_mean <- mean(spike_dat_lfq$log2.intensity)
+        spike_lfq_log2_sd <- sd(spike_dat_lfq$log2.intensity)
+        cutline_below_lfq = spike_lfq_log2_mean - 2*spike_lfq_log2_sd
+        cutline_above_lfq = spike_lfq_log2_mean + 2*spike_lfq_log2_sd
+        below_lfq <- getSpikeBelow2sdSample(spike_dat_lfq)
+        above_lfq <- getSpikeAbove2sdSample(spike_dat_lfq)
+        spike_dat_lfq <- spike_dat_lfq %>% 
+          mutate(outlier = ifelse(sample %in% below_lfq$sample | sample %in% above_lfq$sample, "#FF6666", "#00CCCC"))
+        
+        output$spike_plot_lfq <- renderPlotly({
+          n = nrow(spike_dat_lfq)
+          plot_ly(spike_dat_lfq, x=~sample, y=~log2.intensity, type = "scatter", color =~ I(outlier), name="Spikein") %>% 
+            add_segments(y=cutline_above_lfq, yend=cutline_above_lfq, x=spike_dat_lfq$sample[1], xend=spike_dat_lfq$sample[n], color=I("gray"), name="Mean+2SD") %>% 
+            add_segments(y=spike_lfq_log2_mean, yend=spike_lfq_log2_mean, x=spike_dat_lfq$sample[1], xend=spike_dat_lfq$sample[n], color=I("black"), name="Mean") %>% 
+            add_segments(y=cutline_below_lfq, yend=cutline_below_lfq, x=spike_dat_lfq$sample[1], xend=spike_dat_lfq$sample[n], color=I("gray"), name="Mean-2SD") 
+        })
+        
+        output$spikelow_lfq <- renderTable({
+          below_lfq %>% select(sample, log2.intensity)
+        })
+        
+        output$spikehigh_lfq <- renderTable({
+          above_lfq %>% select(sample, log2.intensity)
+        })
+      }
       
     }
+
+    
+    
 
     ##################################################################################################################################################################################
     # contaminants
@@ -409,21 +473,23 @@ server <- function(input, output, session){
     )
     
     ## lfq
-    lfq_con_info <- getContamInfo(parsed_pg, "lfq")
-    lfq_con_t1 <- getContamTable1(lfq_con_info)
-    
-    lfq_con_t1g <- gather(lfq_con_t1, key = "Contaminant.type", value = "Total.intensity", -sample)
-    
-    output$contam_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(lfq_con_t1g, aes(x=sample, y=Total.intensity, color=Contaminant.type))+
-          geom_point()+
-          labs(y="Total intensity (1og10 scale)")+
-          theme_minimal()+
-          theme(axis.text.x = element_text(angle=90))+
-          scale_y_log10()
+    if(LFQRun=="Y"){
+      lfq_con_info <- getContamInfo(parsed_pg, "lfq")
+      lfq_con_t1 <- getContamTable1(lfq_con_info)
+      
+      lfq_con_t1g <- gather(lfq_con_t1, key = "Contaminant.type", value = "Total.intensity", -sample)
+      
+      output$contam_lfq <- renderPlotly(
+        ggplotly(
+          ggplot(lfq_con_t1g, aes(x=sample, y=Total.intensity, color=Contaminant.type))+
+            geom_point()+
+            labs(y="Total intensity (1og10 scale)")+
+            theme_minimal()+
+            theme(axis.text.x = element_text(angle=90))+
+            scale_y_log10()
+        )
       )
-    )
+    }
     
     ###############################################################################################################
     # protein counts
@@ -435,12 +501,14 @@ server <- function(input, output, session){
     )
     
     ## lfq
-    lfq_prog_count <- getProteinCount(parsed_pg, "lfq")
-    output$pg_count_lfq <- renderPlotly(
-      plot_ly(lfq_prog_count, x=~sample, y=~count, type = "scatter", color=I("#FF6666")) %>% 
-        layout(yaxis=list(title="Number of Protein Group"))
-    )
-    
+    if(LFQRun=="Y"){
+      lfq_prog_count <- getProteinCount(parsed_pg, "lfq")
+      output$pg_count_lfq <- renderPlotly(
+        plot_ly(lfq_prog_count, x=~sample, y=~count, type = "scatter", color=I("#FF6666")) %>% 
+          layout(yaxis=list(title="Number of Protein Group"))
+      )
+    }
+
     ###############################################################################################################
     # protein intensity
     
@@ -454,13 +522,15 @@ server <- function(input, output, session){
     )
     
     ## lfq
-    table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
-    prog_int_sum_lfq <- getTotalIntensity(table_log2_clean_lfq)
-    
-    output$pg_int_lfq <- renderPlotly(
-      plot_ly(prog_int_sum_lfq, x=~sample, y=~Total.Log2.Intensity, type="scatter", color=I("#FF6666"))
-    )
-    
+    if(LFQRun=="Y"){
+      table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
+      prog_int_sum_lfq <- getTotalIntensity(table_log2_clean_lfq)
+      
+      output$pg_int_lfq <- renderPlotly(
+        plot_ly(prog_int_sum_lfq, x=~sample, y=~Total.Log2.Intensity, type="scatter", color=I("#FF6666"))
+      )
+    }
+
     ###############################################################################################################
     # protein intensity
     
@@ -473,31 +543,35 @@ server <- function(input, output, session){
     output$pg_int_vio_raw <- renderPlotly(
       plot_ly(pg_ints_raw_melt, x=~sample, y=~value, type="violin", split =~sample, color = I("#3366CC"), showlegend =FALSE) %>% 
         layout(yaxis=list(title="Log2 Intensity"), xaxis=list(title="Sample"))
-      
     )
-    ## lfq
-    pg_ints_lfq <- getIntensity(table_log2_clean_lfq)
-    pg_ints_lfq_melt <- melt(pg_ints_lfq, id.vars="sample")
-    pg_ints_lfq_melt$value = as.numeric(pg_ints_lfq_melt$value)
     
-    output$pg_int_vio_lfq <- renderPlotly(
-      plot_ly(pg_ints_lfq_melt, x=~sample, y=~value, type="violin", split =~sample, color = I("#FF6666"), showlegend =FALSE) %>% 
-        layout(yaxis=list(title="Log2 Intensity"), xaxis=list(title="Sample"))
+    ## lfq
+    if(LFQRun=="Y"){
+      pg_ints_lfq <- getIntensity(table_log2_clean_lfq)
+      pg_ints_lfq_melt <- melt(pg_ints_lfq, id.vars="sample")
+      pg_ints_lfq_melt$value = as.numeric(pg_ints_lfq_melt$value)
       
-    )
+      output$pg_int_vio_lfq <- renderPlotly(
+        plot_ly(pg_ints_lfq_melt, x=~sample, y=~value, type="violin", split =~sample, color = I("#FF6666"), showlegend =FALSE) %>% 
+          layout(yaxis=list(title="Log2 Intensity"), xaxis=list(title="Sample"))
+      )
+    }
     
     ###############################################################################################################
     # protein intensity
     
     # Raw vs LFQ overll
     # get the melt data from raw and lfq: pg_ints_raw/lfq_melt
-    melt_table <- data.frame(raw=pg_ints_raw_melt$value,
-                             lfq=pg_ints_lfq_melt$value)
+    if(LFQRun=="Y"){
+      melt_table <- data.frame(raw=pg_ints_raw_melt$value,
+                               lfq=pg_ints_lfq_melt$value)
+      
+      output$pg_int_rawlfq <- renderPlotly(
+        plot_ly(melt_table, x=~raw, y=~lfq, type="scatter", marker=list(opacity=0.3)) %>% 
+          layout(xaxis=list(title="Raw Intensity"), yaxis=list(title="LFQ Intensity"))
+      )
+    }
     
-    output$pg_int_rawlfq <- renderPlotly(
-      plot_ly(melt_table, x=~raw, y=~lfq, type="scatter", marker=list(opacity=0.3)) %>% 
-        layout(xaxis=list(title="Raw Intensity"), yaxis=list(title="LFQ Intensity"))
-    )
     
     ###############################################################################################################
     # CV
@@ -514,16 +588,19 @@ server <- function(input, output, session){
     )
     
     ## lfq
-    cv_lfq <- ddply(pg_ints_lfq_melt, .(variable), summarise, cv=sd(value)/mean(value)*100)
-    
-    output$pg_int_cv_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(cv_lfq, aes(x=cv))+
-          geom_density(alpha=0.5, fill="#FF6666")+
-          theme_minimal()+
-          labs(x="Coefficient of Variation (%)", y="Density")
+    if(LFQRun=="Y"){
+      cv_lfq <- ddply(pg_ints_lfq_melt, .(variable), summarise, cv=sd(value)/mean(value)*100)
+      
+      output$pg_int_cv_lfq <- renderPlotly(
+        ggplotly(
+          ggplot(cv_lfq, aes(x=cv))+
+            geom_density(alpha=0.5, fill="#FF6666")+
+            theme_minimal()+
+            labs(x="Coefficient of Variation (%)", y="Density")
+        )
       )
-    )
+    }
+    
     
     ###############################################################################################################
     # top20
@@ -537,31 +614,34 @@ server <- function(input, output, session){
       top20.raw, striped = TRUE
     )
     
-    ## lfq
-    melt_table_name_lfq <- getMeltwithNames(table_log2_clean_lfq)
-    annotated_mean_table_lfq <- countMeanbyProtein(melt_table_name_lfq)
-    top20.lfq <- annotated_mean_table_lfq[1:20,]
-    output$top20_lfq <- renderTable(
-      top20.lfq, striped = TRUE
-    )
-    
     output$dannotated_mean_table_raw <- downloadHandler(
       filename = function(){
         paste0(input$prefix,"_mean_log2_raw_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(annotated_mean_table_raw, file, sep = "\t")
+        write.table(annotated_mean_table_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
-    output$dannotated_mean_table_lfq <- downloadHandler(
-      filename = function(){
-        paste0(input$prefix,"_mean_log2_lfq_",Sys.Date(),".tsv")
-      },
-      content = function(file){
-        write.table(annotated_mean_table_lfq, file, sep = "\t")
-      }
-    )
+    ## lfq
+    if(LFQRun=="Y"){
+      melt_table_name_lfq <- getMeltwithNames(table_log2_clean_lfq)
+      annotated_mean_table_lfq <- countMeanbyProtein(melt_table_name_lfq)
+      top20.lfq <- annotated_mean_table_lfq[1:20,]
+      output$top20_lfq <- renderTable(
+        top20.lfq, striped = TRUE
+      )
+      
+      output$dannotated_mean_table_lfq <- downloadHandler(
+        filename = function(){
+          paste0(input$prefix,"_mean_log2_lfq_",Sys.Date(),".tsv")
+        },
+        content = function(file){
+          write.table(annotated_mean_table_lfq, file, sep = "\t", row.names = FALSE)
+        }
+      )
+    }
+    
     
     ###############################################################################################################
     # pca
@@ -570,31 +650,40 @@ server <- function(input, output, session){
     pc12_raw <- getPC12Percentage(table_log2_clean_raw)
     
     output$pca_raw <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_raw, aes(x=PC1, y=PC2, color=sample) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
-               y=paste0("PC2 (", pc12_raw[2], "%)"))
-      )
-      #plot_ly(pca_table_raw, x=~PC1, y=~PC2, type = "scatter", color=~sample, text=~sample, marker=list(size=16, opacity=0.5))
+      #ggplotly(
+        #ggplot(pca_table_raw, aes(x=PC1, y=PC2, color=sample) )+ 
+        #  geom_point(alpha=0.5, size=3)+
+        #  theme_bw()+
+        #  labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
+        #       y=paste0("PC2 (", pc12_raw[2], "%)"))
+      #)
+      plot_ly(pca_table_raw, x=~PC1, y=~PC2, type = "scatter", color=~sample, text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+        layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE),
+               yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
     )
     ## lfq
-    pca_table_lfq <- getPCAtable(table_log2_clean_lfq)
-    pc12_lfq <- getPC12Percentage(table_log2_clean_lfq)
-    
-    
-    output$pca_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_lfq, aes(x=PC1, y=PC2, color=sample) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
-               y=paste0("PC2 (", pc12_lfq[2], "%)"))
-      )
-      #plot_ly(pca_table_lfq, x=~PC1, y=~PC2, type = "scatter", color=~sample, text=~sample, marker=list(size=16, opacity=0.5))
+    if(LFQRun=="Y"){
+      pca_table_lfq <- getPCAtable(table_log2_clean_lfq)
+      pc12_lfq <- getPC12Percentage(table_log2_clean_lfq)
       
-    )
+      
+      output$pca_lfq <- renderPlotly(
+        #ggplotly(
+        #  ggplot(pca_table_lfq, aes(x=PC1, y=PC2, color=sample) )+ 
+        #    geom_point(alpha=0.5, size=3)+
+        #    theme_bw()+
+        #    labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
+        #         y=paste0("PC2 (", pc12_lfq[2], "%)"))
+        #)
+        plot_ly(pca_table_lfq, x=~PC1, y=~PC2, type = "scatter", color=~sample, text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+          layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE),
+                 yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
+        
+        
+        
+      )
+    }
+    
     
     ###############################################################################################################
     # end
@@ -603,7 +692,7 @@ server <- function(input, output, session){
   
   ### 2 peptides.txt
   pt_response <- reactive({
-    pt_file <<- input$pt_file$datapath
+    pt_file <- input$pt_file$datapath
     pt <- read.table(pt_file, header = T, sep = "\t", stringsAsFactors = F, quote = "\"", comment.char = "")
     
     # get the average of Cysteine
@@ -672,17 +761,28 @@ server <- function(input, output, session){
     doe_file <- input$doe_file$datapath
     doe <- read.table(doe_file, sep = input$sep, header = T)
     
+    colnames(doe) <- gsub(" ", ".", colnames(doe))
+    colnames(doe) <- tolower(colnames(doe))
+    doe$type <- tolower(doe$type)
+    
     doe$sample.id <- gsub(" ", ".", doe$sample.id)
     doe$sample.id <- gsub("-", ".", doe$sample.id)
     
-    colnames(doe) <- tolower(colnames(doe))
-    doe$type <- tolower(doe$type)
+    
     
     ################################################################################################
     # read pg as well
     pg <- read.table(input$pg_file$datapath, header = T, sep = "\t", stringsAsFactors = F, quote = "\"", comment.char = "")
     parsed_pg <- process_pg(pg)
     
+    # check LFQ
+    pg_lfq_col <- parsed_pg %>% 
+      select(starts_with("LFQ"))
+    if(length(colnames(pg_lfq_col))>0){
+      LFQRun <- "Y"
+    }else{
+      LFQRun <- "N"
+    }
     ################################################################################################
     # data structure
     int_col <- pg %>% 
@@ -716,13 +816,15 @@ server <- function(input, output, session){
     )
     
     ## lfq
-    lfq_con_info <- getContamInfo(parsed_pg, "raw")
-    lfq_con_t2 <- getContamTable2(lfq_con_info, doe)
-    
-    output$contam_lfq_st <- renderPlotly(
-      plot_ly(lfq_con_t2, y=~log2(intensity), x=~sample.type, color=~kind_contam, type = "box") %>% 
-        layout(yaxis=list(title="Log2 LFQ Intensity" ),boxmode = "group")
-    )
+    if(LFQRun=="Y"){
+      lfq_con_info <- getContamInfo(parsed_pg, "lfq")
+      lfq_con_t2 <- getContamTable2(lfq_con_info, doe)
+      
+      output$contam_lfq_st <- renderPlotly(
+        plot_ly(lfq_con_t2, y=~log2(intensity), x=~sample.type, color=~kind_contam, type = "box") %>% 
+          layout(yaxis=list(title="Log2 LFQ Intensity" ),boxmode = "group")
+      )
+    }
     
     ################################################################################################
     # protein counts 
@@ -735,11 +837,14 @@ server <- function(input, output, session){
     )
     
     ## lfq
-    lfq_prog_count_doe <- getProteinCountDoe(parsed_pg, "lfq", doe)
-    output$pg_count_st_lfq <- renderPlotly(
-      plot_ly(lfq_prog_count_doe, x=~sample.type, y=~count, type = "box", color=I("#FF6666")) %>% 
-        layout(yaxis=list(title="Number of Protein Groups"))
-    )
+    if(LFQRun=="Y"){
+      lfq_prog_count_doe <- getProteinCountDoe(parsed_pg, "lfq", doe)
+      output$pg_count_st_lfq <- renderPlotly(
+        plot_ly(lfq_prog_count_doe, x=~sample.type, y=~count, type = "box", color=I("#FF6666")) %>% 
+          layout(yaxis=list(title="Number of Protein Groups"))
+      )
+    }
+    
     
     # type cdf plot
     ## raw
@@ -753,14 +858,17 @@ server <- function(input, output, session){
     )
     
     ## lfq
-    per_data_melt_lfq <- getExpressedSamplePercentPerProteinEachType(parsed_pg, "lfq", doe)
-    output$pg_count_t_lfq <- renderPlot(
-      ggplot(per_data_melt_lfq, aes(x=Value, color=Type))+
-        stat_ecdf(geom = "step")+
-        scale_x_reverse()+
-        labs(x="Percent of samples expressed per protein (%)", y="Proportion of expressed proteins")+
-        theme_minimal()
-    )
+    if(LFQRun=="Y"){
+      per_data_melt_lfq <- getExpressedSamplePercentPerProteinEachType(parsed_pg, "lfq", doe)
+      output$pg_count_t_lfq <- renderPlot(
+        ggplot(per_data_melt_lfq, aes(x=Value, color=Type))+
+          stat_ecdf(geom = "step")+
+          scale_x_reverse()+
+          labs(x="Percent of samples expressed per protein (%)", y="Proportion of expressed proteins")+
+          theme_minimal()
+      )
+    }
+    
     
     ################################################################################################
     # peptide counts
@@ -807,27 +915,30 @@ server <- function(input, output, session){
                xaxis=list(title="Protein Group"))
     )
     ## lfq
-    table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
-    pg_ints_lfq <- getIntensity(table_log2_clean_lfq)
-    pg_ints_lfq_melt <- melt(pg_ints_lfq, id.vars="sample")
-    pg_ints_lfq_melt$value = as.numeric(pg_ints_lfq_melt$value)
+    if(LFQRun=="Y"){
+      table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
+      pg_ints_lfq <- getIntensity(table_log2_clean_lfq)
+      pg_ints_lfq_melt <- melt(pg_ints_lfq, id.vars="sample")
+      pg_ints_lfq_melt$value = as.numeric(pg_ints_lfq_melt$value)
+      
+      mp_lfq <- getMedianIntPlotData(pg_ints_lfq_melt, doe)
+      
+      output$pg_int_mpp_lfq <- renderPlotly(
+        plot_ly(mp_lfq, type = "scatter", mode = "markers") %>% 
+          add_trace(y = ~All, name = 'All sample', marker = list(opacity=0.2, color="#FF6666")) %>% 
+          layout(yaxis=list(title="Mean Intensity/\nSum of Mean Intensities (log scale)", type='log'), 
+                 xaxis=list(title="Protein Group"))
+      )
+      
+      output$pg_int_mpp_t_lfq <- renderPlotly(
+        plot_ly(mp_lfq, type = "scatter", mode = "markers") %>% 
+          add_trace(y = ~Control, name = 'Control', marker = list(opacity=0.2)) %>%
+          add_trace(y = ~Sample, name = 'Sample', marker = list(opacity=0.2)) %>% 
+          layout(yaxis=list(title="Mean Intensity/\nSum of Mean Intensities (log scale)", type='log'), 
+                 xaxis=list(title="Protein Group"))
+      )
+    }
     
-    mp_lfq <- getMedianIntPlotData(pg_ints_lfq_melt, doe)
-    
-    output$pg_int_mpp_lfq <- renderPlotly(
-      plot_ly(mp_lfq, type = "scatter", mode = "markers") %>% 
-        add_trace(y = ~All, name = 'All sample', marker = list(opacity=0.2, color="#FF6666")) %>% 
-        layout(yaxis=list(title="Mean Intensity/\nSum of Mean Intensities (log scale)", type='log'), 
-               xaxis=list(title="Protein Group"))
-    )
-    
-    output$pg_int_mpp_t_lfq <- renderPlotly(
-      plot_ly(mp_lfq, type = "scatter", mode = "markers") %>% 
-        add_trace(y = ~Control, name = 'Control', marker = list(opacity=0.2)) %>%
-        add_trace(y = ~Sample, name = 'Sample', marker = list(opacity=0.2)) %>% 
-        layout(yaxis=list(title="Mean Intensity/\nSum of Mean Intensities (log scale)", type='log'), 
-               xaxis=list(title="Protein Group"))
-    )
     
     ################################################################################################
     # protein intensity - cdf plot and violin plot
@@ -847,54 +958,67 @@ server <- function(input, output, session){
     
     output$pg_int_vio_raw_doe <- renderPlotly(
       ggplotly(
-        ggplot(pg_ints_raw_melt_doe, aes(x=reorder(sample,run.order), y=value, fill=sample.type))+
+        ggplot(pg_ints_raw_melt_doe, aes(x=reorder(sample,run.order), y=value, color=sample.type, fill=sample.type))+
           geom_violin()+
           theme_minimal()+
           labs(x="Sample by Run order", y="Log2 Intensity")+
           theme(axis.text.x = element_text(angle = 90))
       )
     )
-    
     
     ## lfq
-    pg_ints_lfq_melt_doe = pg_ints_lfq_melt %>% 
-      left_join(doe, by=c("sample"="sample.id"))
-    
-    output$pg_int_cdf_st_lfq <- renderPlot(
-      ggplot(pg_ints_lfq_melt_doe, aes(x=value+0.000001, color=sample))+
-        stat_ecdf()+
-        labs(x = "Log2 Intensities by Protein", 
-             y = "Fraction of Library") + 
-        theme_minimal() +
-        facet_wrap(~sample.type, ncol = 2)
-    )
-    
-    output$pg_int_vio_lfq_doe <- renderPlotly(
-      ggplotly(
-        ggplot(pg_ints_lfq_melt_doe, aes(x=reorder(sample,run.order), y=value, fill=sample.type))+
-          geom_violin()+
-          theme_minimal()+
-          labs(x="Sample by Run order", y="Log2 Intensity")+
-          theme(axis.text.x = element_text(angle = 90))
+    if(LFQRun=="Y"){
+      pg_ints_lfq_melt_doe = pg_ints_lfq_melt %>% 
+        left_join(doe, by=c("sample"="sample.id"))
+      
+      output$pg_int_cdf_st_lfq <- renderPlot(
+        ggplot(pg_ints_lfq_melt_doe, aes(x=value+0.000001, color=sample))+
+          stat_ecdf()+
+          labs(x = "Log2 Intensities by Protein", 
+               y = "Fraction of Library") + 
+          theme_minimal() +
+          facet_wrap(~sample.type, ncol = 2)
       )
-    )  
+      
+      output$pg_int_vio_lfq_doe <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_lfq_melt_doe, aes(x=reorder(sample,run.order), y=value, color=sample.type, fill=sample.type))+
+            geom_violin()+
+            theme_minimal()+
+            labs(x="Sample by Run order", y="Log2 Intensity")+
+            theme(axis.text.x = element_text(angle = 90))
+        )
+      ) 
+    }
+     
     
     ################################################################################################
     # protein intensity - Raw vs LFQ sample.type
     # get the melt data from raw and lfq: pg_ints_raw/lfq_melt_doe
-    melt_table_doe <- data.frame(sample=pg_ints_raw_melt_doe$sample,
-                                 type=pg_ints_raw_melt_doe$type,
-                                 sample.type=pg_ints_raw_melt_doe$sample.type,
-                                 raw=pg_ints_raw_melt_doe$value,
-                                 lfq=pg_ints_lfq_melt_doe$value)
-    
-    output$pg_int_st_rawlfq <- renderPlotly(
-      melt_table_doe %>% 
-        group_by(sample.type) %>% 
-        group_map(~ plot_ly(data = ., x=~raw, y=~lfq, color=~sample.type, type="scatter", marker=list(opacity=0.3)), keep = TRUE) %>% 
-        subplot(nrows = 3, shareX = TRUE, shareY = TRUE) %>% 
-        layout(xaxis=list(title="Raw Intensity"), yaxis=list(title="LFQ Intensity"))
-    )
+    if(LFQRun=="Y"){
+      melt_table_doe <- data.frame(sample=pg_ints_raw_melt_doe$sample,
+                                   type=pg_ints_raw_melt_doe$type,
+                                   sample.type=pg_ints_raw_melt_doe$sample.type,
+                                   raw=pg_ints_raw_melt_doe$value,
+                                   lfq=pg_ints_lfq_melt_doe$value)
+      
+      st_num <- length(unique(melt_table_doe$sample.type))
+      if(st_num<=3){
+        n=2
+      }else{
+        n=3
+      }
+      n <- as.numeric(n)
+      
+      output$pg_int_st_rawlfq <- renderPlotly(
+        
+        melt_table_doe %>% 
+          group_by(sample.type) %>% 
+          group_map(~ plot_ly(data = ., x=~raw, y=~lfq, color=~sample.type, type="scatter", marker=list(opacity=0.3)), keep = TRUE) %>% 
+          subplot(nrows = n, shareX = TRUE, shareY = TRUE) %>% 
+          layout(xaxis=list(title="Raw Intensity"), yaxis=list(title="LFQ Intensity"))
+      )
+    }
     
     ################################################################################################
     # CV with doe, sample type
@@ -920,25 +1044,28 @@ server <- function(input, output, session){
     )
     
     ## lfq
-    cv_lfq_st <- ddply(pg_ints_lfq_melt_doe, .(variable, sample.type), summarise, cv=sd(value)/mean(value)*100)
+    if(LFQRun=="Y"){
+      cv_lfq_st <- ddply(pg_ints_lfq_melt_doe, .(variable, sample.type), summarise, cv=sd(value)/mean(value)*100)
+      
+      output$pg_int_cv_st_lfq <- renderPlotly(
+        ggplotly(
+          ggplot(cv_lfq_st, aes(x=cv, fill=sample.type))+
+            geom_density(alpha=0.5)+
+            theme_minimal()+
+            labs(x="Coefficient of Variation (%)", y="Density")
+        )
+      )
+      output$pg_int_cv_st_lfq_split <- renderPlotly(
+        ggplotly(
+          ggplot(cv_lfq_st, aes(x=cv, fill=sample.type))+
+            geom_density(alpha=0.5)+
+            theme_minimal()+
+            labs(x="Coefficient of Variation (%)", y="Density")+
+            facet_grid(~sample.type)
+        )
+      )
+    }
     
-    output$pg_int_cv_st_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(cv_lfq_st, aes(x=cv, fill=sample.type))+
-          geom_density(alpha=0.5)+
-          theme_minimal()+
-          labs(x="Coefficient of Variation (%)", y="Density")
-      )
-    )
-    output$pg_int_cv_st_lfq_split <- renderPlotly(
-      ggplotly(
-        ggplot(cv_lfq_st, aes(x=cv, fill=sample.type))+
-          geom_density(alpha=0.5)+
-          theme_minimal()+
-          labs(x="Coefficient of Variation (%)", y="Density")+
-          facet_grid(~sample.type)
-      )
-    )
     
     # CV with doe, type
     ## raw
@@ -964,26 +1091,29 @@ server <- function(input, output, session){
     )
     
     ## lfq
-    cv_lfq_t <- ddply(pg_ints_lfq_melt_doe, .(variable, type), summarise, cv=sd(value)/mean(value)*100)
-    
-    output$pg_int_cv_t_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(cv_lfq_t, aes(x=cv, fill=type))+
-          geom_density(alpha=0.5)+
-          theme_minimal()+
-          labs(x="Coefficient of Variation (%)", y="Density")
+    if(LFQRun=="Y"){
+      cv_lfq_t <- ddply(pg_ints_lfq_melt_doe, .(variable, type), summarise, cv=sd(value)/mean(value)*100)
+      
+      output$pg_int_cv_t_lfq <- renderPlotly(
+        ggplotly(
+          ggplot(cv_lfq_t, aes(x=cv, fill=type))+
+            geom_density(alpha=0.5)+
+            theme_minimal()+
+            labs(x="Coefficient of Variation (%)", y="Density")
+        )
       )
-    )
-    
-    output$pg_int_cv_t_lfq_split <- renderPlotly(
-      ggplotly(
-        ggplot(cv_lfq_t, aes(x=cv, fill=type))+
-          geom_density(alpha=0.5)+
-          theme_minimal()+
-          labs(x="Coefficient of Variation (%)", y="Density")+
-          facet_grid(~type)
+      
+      output$pg_int_cv_t_lfq_split <- renderPlotly(
+        ggplotly(
+          ggplot(cv_lfq_t, aes(x=cv, fill=type))+
+            geom_density(alpha=0.5)+
+            theme_minimal()+
+            labs(x="Coefficient of Variation (%)", y="Density")+
+            facet_grid(~type)
+        )
       )
-    )
+    }
+    
     
     ################################################################################################
     # top20 sample.type
@@ -992,73 +1122,101 @@ server <- function(input, output, session){
     melt_table_name_raw_doe <- melt_table_name_raw %>% 
       left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
     
-    wide_sampletype_sort_table_raw <- countMeanbyProteinSampletypeDoe(melt_table_name_raw_doe)
-    long_sampletype_top20_raw <- getTop20sampletypeTable(wide_sampletype_sort_table_raw)
-    output$top20_st_raw <- renderTable(
-      long_sampletype_top20_raw, striped = TRUE
-    )
+ 
+    wide_sampletype_table_raw <- countMeanbyProteinSampletypeDoe(melt_table_name_raw_doe)
+    name_col_st_raw <- wide_sampletype_table_raw[,c(1:3)]
+    measure_col_st_raw <- wide_sampletype_table_raw[,c(4:ncol(wide_sampletype_table_raw))]
     
-    ## lfq
-    melt_table_name_lfq <- getMeltwithNames(table_log2_clean_lfq)
-    melt_table_name_lfq_doe <- melt_table_name_lfq %>% 
-      left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
+    output$sampletype_raw <- renderUI({
+      st_list <- sort(unique(doe$sample.type))
+      selectInput("st_selected_raw", h4("Choose Sample Type"),
+                  choices = st_list, selected = 1)
+    })
     
-    wide_sampletype_sort_table_lfq <- countMeanbyProteinSampletypeDoe(melt_table_name_lfq_doe)
-    long_sampletype_top20_lfq <- getTop20sampletypeTable(wide_sampletype_sort_table_lfq)
-    output$top20_st_lfq <- renderTable(
-      long_sampletype_top20_lfq, striped = TRUE
-    )
     
     output$dwide_sampletype_sort_table_raw <- downloadHandler(
       filename = function(){
         paste0(input$prefix,"_meanBySampletype_log2_raw_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(wide_sampletype_sort_table_raw, file, sep = "\t")
+        write.table(wide_sampletype_table_raw, file, sep = "\t", row.names = FALSE)
       }
-    )
-    
-    output$dwide_sampletype_sort_table_lfq <- downloadHandler(
-      filename = function(){
-        paste0(input$prefix,"_meanBySampletype_log2_lfq_",Sys.Date(),".tsv")
-      },
-      content = function(file){
-        write.table(wide_sampletype_sort_table_lfq, file, sep = "\t")
-      }
-    )
-    
-    # top20 type
-    ## raw
-    wide_type_sort_table_raw <- countMeanbyProteinTypeDoe(melt_table_name_raw_doe)
-    long_type_top20_raw <- getTop20TypeTable(wide_type_sort_table_raw)
-    output$top20_t_raw <- renderTable(
-      long_type_top20_raw, striped = TRUE
     )
     
     ## lfq
-    wide_type_sort_table_lfq <- countMeanbyProteinTypeDoe(melt_table_name_lfq_doe)
-    long_type_top20_lfq <- getTop20TypeTable(wide_type_sort_table_lfq)
-    output$top20_t_lfq <- renderTable(
-      long_type_top20_lfq, striped = TRUE
-    )
+    if(LFQRun=="Y"){
+      melt_table_name_lfq <- getMeltwithNames(table_log2_clean_lfq)
+      melt_table_name_lfq_doe <- melt_table_name_lfq %>% 
+        left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
+      
+      wide_sampletype_table_lfq <- countMeanbyProteinSampletypeDoe(melt_table_name_lfq_doe)
+      name_col_st_lfq <- wide_sampletype_table_lfq[,c(1:3)]
+      measure_col_st_lfq <- wide_sampletype_table_lfq[,c(4:ncol(wide_sampletype_table_lfq))]
+      
+      output$sampletype_lfq <- renderUI({
+        st_list <- sort(unique(doe$sample.type))
+        selectInput("st_selected_lfq", h4("Choose Sample Type"),
+                    choices = st_list, selected = 1)
+      })
+      
+      
+      output$dwide_sampletype_sort_table_lfq <- downloadHandler(
+        filename = function(){
+          paste0(input$prefix,"_meanBySampletype_log2_lfq_",Sys.Date(),".tsv")
+        },
+        content = function(file){
+          write.table(wide_sampletype_sort_table_lfq, file, sep = "\t", row.names = FALSE)
+        }
+      )
+    }
+    
+
+    # top20 type
+    ## raw
+    wide_type_table_raw <- countMeanbyProteinTypeDoe(melt_table_name_raw_doe)
+    name_col_t_raw <- wide_type_table_raw[,c(1:3)]
+    measure_col_t_raw <- wide_type_table_raw[,c(4:ncol(wide_type_table_raw))]
+    
+    output$type_raw <- renderUI({
+      t_list <- sort(unique(doe$type))
+      selectInput("t_selected_raw", h4("Choose Type"),
+                  choices = t_list, selected = 1)
+    })
+    
     
     output$dwide_type_sort_table_raw <- downloadHandler(
       filename = function(){
         paste0(input$prefix,"_meanByType_log2_raw_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(wide_sampletype_sort_table_raw, file, sep = "\t")
+        write.table(wide_type_table_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
-    output$dwide_type_sort_table_lfq <- downloadHandler(
-      filename = function(){
-        paste0(input$prefix,"_meanByType_log2_lfq_",Sys.Date(),".tsv")
-      },
-      content = function(file){
-        write.table(wide_sampletype_sort_table_lfq, file, sep = "\t")
-      }
-    )
+    ## lfq
+    if(LFQRun=="Y"){
+      
+      wide_type_table_lfq <- countMeanbyProteinTypeDoe(melt_table_name_lfq_doe)
+      name_col_t_lfq <- wide_type_table_lfq[,c(1:3)]
+      measure_col_t_lfq <- wide_type_table_lfq[,c(4:ncol(wide_type_table_lfq))]
+      
+      output$type_lfq <- renderUI({
+        t_list <- sort(unique(doe$type))
+        selectInput("t_selected_lfq", h4("Choose Type"),
+                    choices = t_list, selected = 1)
+      })
+      
+      
+      output$dwide_type_sort_table_lfq <- downloadHandler(
+        filename = function(){
+          paste0(input$prefix,"_meanByType_log2_lfq_",Sys.Date(),".tsv")
+        },
+        content = function(file){
+          write.table(wide_type_table_lfq, file, sep = "\t", row.names = FALSE)
+        }
+      )
+    }
+    
     
     ################################################################################################
     # pca sample    sample.type, run.order
@@ -1067,52 +1225,63 @@ server <- function(input, output, session){
     pc12_raw <- getPC12Percentage(table_log2_clean_raw)
     
     output$pca_st_raw <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_raw_doe, aes(x=PC1, y=PC2, color=sample.type, shape=type) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
-               y=paste0("PC2 (", pc12_raw[2], "%)"))
-      )
-      #plot_ly(pca_table_raw_doe, x=~PC1, y=~PC2, type = "scatter", color=~sample.type, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5))
+      #ggplotly(
+      #  ggplot(pca_table_raw_doe, aes(x=PC1, y=PC2, color=sample.type, shape=type) )+ 
+      #    geom_point(alpha=0.5, size=3)+
+      #    theme_bw()+
+      #    labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
+      #         y=paste0("PC2 (", pc12_raw[2], "%)"))
+      #)
+      plot_ly(pca_table_raw_doe, x=~PC1, y=~PC2, type = "scatter", color=~sample.type, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+        layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+               yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
     )
     
     output$pca_ro_raw <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_raw_doe, aes(x=PC1, y=PC2, color=run.order, shape=type) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
-               y=paste0("PC2 (", pc12_raw[2], "%)"))
-      )
-      #plot_ly(pca_table_raw_doe, x=~PC1, y=~PC2, type = "scatter", color=~run.order, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5))
+      #ggplotly(
+      #  ggplot(pca_table_raw_doe, aes(x=PC1, y=PC2, color=run.order, shape=type) )+ 
+      #    geom_point(alpha=0.5, size=3)+
+      #    theme_bw()+
+      #    labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
+      #         y=paste0("PC2 (", pc12_raw[2], "%)"))
+      #)
+      plot_ly(pca_table_raw_doe, x=~PC1, y=~PC2, type = "scatter", color=~run.order, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+        layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+               yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
     )
     
     ## lfq
-    pca_table_lfq_doe <- getPCAtableDOE(table_log2_clean_lfq, doe)
-    pc12_lfq <- getPC12Percentage(table_log2_clean_lfq)
-    
-    output$pca_st_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_lfq_doe, aes(x=PC1, y=PC2, color=sample.type, shape=type) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
-               y=paste0("PC2 (", pc12_lfq[2], "%)"))
+    if(LFQRun=="Y"){
+      pca_table_lfq_doe <- getPCAtableDOE(table_log2_clean_lfq, doe)
+      pc12_lfq <- getPC12Percentage(table_log2_clean_lfq)
+      
+      output$pca_st_lfq <- renderPlotly(
+        #ggplotly(
+        #  ggplot(pca_table_lfq_doe, aes(x=PC1, y=PC2, color=sample.type, shape=type) )+ 
+        #    geom_point(alpha=0.5, size=3)+
+        #    theme_bw()+
+        #    labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
+        #         y=paste0("PC2 (", pc12_lfq[2], "%)"))
+        #)
+        plot_ly(pca_table_lfq_doe, x=~PC1, y=~PC2, type = "scatter", color=~sample.type, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+          layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+                 yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
       )
-      #plot_ly(pca_table_lfq_doe, x=~PC1, y=~PC2, type = "scatter", color=~sample.type, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5))
-    )
-    
-    output$pca_ro_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_lfq_doe, aes(x=PC1, y=PC2, color=run.order, shape=type) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
-               y=paste0("PC2 (", pc12_lfq[2], "%)"))
+      
+      output$pca_ro_lfq <- renderPlotly(
+        #ggplotly(
+        #  ggplot(pca_table_lfq_doe, aes(x=PC1, y=PC2, color=run.order, shape=type) )+ 
+        #    geom_point(alpha=0.5, size=3)+
+        #    theme_bw()+
+        #    labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
+        #         y=paste0("PC2 (", pc12_lfq[2], "%)"))
+        #)
+        plot_ly(pca_table_lfq_doe, x=~PC1, y=~PC2, type = "scatter", color=~run.order, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+          layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+                 yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
       )
-      #plot_ly(pca_table_lfq_doe, x=~PC1, y=~PC2, type = "scatter", color=~run.order, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5))
-    )
+    }
+    
     
     ################################################################################################
     # contribution of the variance
@@ -1125,96 +1294,214 @@ server <- function(input, output, session){
     )
     
     ## lfq
-    pvca_lfq <- getPVCAresult(table_log2_clean_lfq, doe)
+    if(LFQRun=="Y"){
+      pvca_lfq <- getPVCAresult(table_log2_clean_lfq, doe)
+      
+      output$ctbv_lfq <- renderPlotly(
+        plot_ly(pvca_lfq, x=~Variable, y=~Proportion.Variance, type="bar", color=~Variable) %>% 
+          layout(yaxis=list(title="Weighted average proportion variance"), xaxis=list(title="Variables"))
+      )
+    }
     
-    output$ctbv_lfq <- renderPlotly(
-      plot_ly(pvca_lfq, x=~Variable, y=~Proportion.Variance, type="bar", color=~Variable) %>% 
-        layout(yaxis=list(title="Weighted average proportion variance"), xaxis=list(title="Variables"))
-    )
-    updateProgressBar(session = session, id = "pb1", value = 80, total = 100)
     ################################################################################################
     # quantro
-    ## raw
-    qt_raw <- doQuantro(table_log2_clean_raw, doe)
-    output$qt_qt_raw <- renderTable(
-      qt_raw
-    )
-    qt_raw_a <- doQuantroAnova(table_log2_clean_raw, doe)
-    output$qt_anov_raw <- renderTable(
-      qt_raw_a, striped = TRUE
-    )
-    
-    ## lfq
-    qt_lfq <- doQuantro(table_log2_clean_lfq, doe)
-    output$qt_qt_lfq <- renderTable(
-      qt_lfq
-    )
-    qt_lfq_a <- doQuantroAnova(table_log2_clean_lfq, doe)
-    output$qt_anov_lfq <- renderTable(
-      qt_lfq_a, striped = TRUE
-    )
-    
-    # use pg_ints_raw_melt_doe or pg_ints_lfq_melt_doe
-    # boxplot
-    ## raw
-    pg_ints_raw_melt_doe$value = as.numeric(pg_ints_raw_melt_doe$value)
-    output$qt_box_raw <- renderPlotly(
-      plot_ly(pg_ints_raw_melt_doe %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
-        layout(yaxis=list(title="Log2 Intensity "),
-               xaxis=list(title="Sample", 
-                          categoryorder= "array",
-                          categoryarray=~sample.type))
-    )
-    
-    ## lfq
-    pg_ints_lfq_melt_doe$value = as.numeric(pg_ints_lfq_melt_doe$value)
-    output$qt_box_lfq <- renderPlotly(
-      plot_ly(pg_ints_lfq_melt_doe %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
-        layout(yaxis=list(title="Log2 Intensity "),
-               xaxis=list(title="Sample", 
-                          categoryorder= "array",
-                          categoryarray=~sample.type))
-    )
-    
-    # density
-    ## raw
-    output$qt_den_raw <- renderPlotly(
-      ggplotly(
-        ggplot(pg_ints_raw_melt_doe, aes(x=value))+
-          stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
-          labs(x="Log2 Intensity", y="Density")+
-          theme_minimal()
+    # check the number of sample.type is >= 2
+    if(length(unique(doe$sample.type))<2){
+      output$qt_notallow <- renderText(
+        "The number of 'sample.type' is less than 2, Quantro can not be applied!"
       )
-    )
+    }else{
+      output$qt_notallow <- renderText(
+        ""
+      )
+      ## raw
+      qt_raw <- doQuantro(table_log2_clean_raw, doe)
+      output$qt_qt_raw <- renderTable(
+        qt_raw
+      )
+      qt_raw_a <- doQuantroAnova(table_log2_clean_raw, doe)
+      output$qt_anov_raw <- renderTable(
+        qt_raw_a, striped = TRUE
+      )
+      
+      ## lfq
+      if(LFQRun=="Y"){
+        qt_lfq <- doQuantro(table_log2_clean_lfq, doe)
+        output$qt_qt_lfq <- renderTable(
+          qt_lfq
+        )
+        qt_lfq_a <- doQuantroAnova(table_log2_clean_lfq, doe)
+        output$qt_anov_lfq <- renderTable(
+          qt_lfq_a, striped = TRUE
+        )
+      }
+      
+      # use pg_ints_raw_melt_doe or pg_ints_lfq_melt_doe
+      # boxplot
+      ## raw
+      pg_ints_raw_melt_doe$value = as.numeric(pg_ints_raw_melt_doe$value)
+      output$qt_box_raw <- renderPlotly(
+        plot_ly(pg_ints_raw_melt_doe %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+          layout(yaxis=list(title="Log2 Intensity "),
+                 xaxis=list(title="Sample", 
+                            categoryorder= "array",
+                            categoryarray=~sample.type))
+      )
+      
+      ## lfq
+      if(LFQRun=="Y"){
+        pg_ints_lfq_melt_doe$value = as.numeric(pg_ints_lfq_melt_doe$value)
+        output$qt_box_lfq <- renderPlotly(
+          plot_ly(pg_ints_lfq_melt_doe %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+            layout(yaxis=list(title="Log2 Intensity "),
+                   xaxis=list(title="Sample", 
+                              categoryorder= "array",
+                              categoryarray=~sample.type))
+        )
+      }
+      
+      # density
+      ## raw
+      output$qt_den_raw <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe, aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()
+        )
+      )
+      
+      output$qt_den_raw_split <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe, aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()+
+            facet_wrap(~ sample.type)
+        )
+      )
+      ## lfq
+      if(LFQRun=="Y"){
+        output$qt_den_lfq <- renderPlotly(
+          ggplotly(
+            ggplot(pg_ints_raw_melt_doe, aes(x=value))+
+              stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+              labs(x="Log2 Intensity", y="Density")+
+              theme_minimal()
+          )
+        )
+        output$qt_den_lfq_split <- renderPlotly(
+          ggplotly(
+            ggplot(pg_ints_raw_melt_doe, aes(x=value))+
+              stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+              labs(x="Log2 Intensity", y="Density")+
+              theme_minimal()+
+              facet_wrap(~ sample.type)
+          )
+        )
+      }
+      
+    }
     
-    output$qt_den_raw_split <- renderPlotly(
-      ggplotly(
-        ggplot(pg_ints_raw_melt_doe, aes(x=value))+
-          stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
-          labs(x="Log2 Intensity", y="Density")+
-          theme_minimal()+
-          facet_wrap(~ sample.type)
-      )
-    )
-    ## lfq
-    output$qt_den_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(pg_ints_raw_melt_doe, aes(x=value))+
-          stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
-          labs(x="Log2 Intensity", y="Density")+
-          theme_minimal()
-      )
-    )
-    output$qt_den_lfq_split <- renderPlotly(
-      ggplotly(
-        ggplot(pg_ints_raw_melt_doe, aes(x=value))+
-          stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
-          labs(x="Log2 Intensity", y="Density")+
-          theme_minimal()+
-          facet_wrap(~ sample.type)
-      )
-    )
     
+    # quantro --- No control
+    nc_doe <- doe %>% filter(type=="sample")
+    if(length(unique(nc_doe$sample.type))<2){
+      output$nc_qt_notallow <- renderText(
+        "The number of 'sample.type' after filtering out the control samples is less than 2, Quantro can not be applied!"
+      )
+    }else{
+      ## raw
+      nc_qt_raw <- doQuantroNoControl(table_log2_clean_raw, doe)
+      output$nc_qt_qt_raw <- renderTable(
+        nc_qt_raw
+      )
+      nc_qt_raw_a <- doQuantroNoControlAnova(table_log2_clean_raw, doe)
+      output$nc_qt_anov_raw <- renderTable(
+        nc_qt_raw_a, striped = TRUE
+      )
+      
+      ## lfq
+      if(LFQRun=="Y"){
+        nc_qt_lfq <- doQuantroNoControl(table_log2_clean_lfq, doe)
+        output$nc_qt_qt_lfq <- renderTable(
+          nc_qt_lfq
+        )
+        nc_qt_lfq_a <- doQuantroNoControlAnova(table_log2_clean_lfq, doe)
+        output$nc_qt_anov_lfq <- renderTable(
+          nc_qt_lfq_a, striped = TRUE
+        )
+      }
+      
+      # use pg_ints_raw_melt_doe or pg_ints_lfq_melt_doe
+      # boxplot
+      ## raw
+      pg_ints_raw_melt_doe$value = as.numeric(pg_ints_raw_melt_doe$value)
+      output$nc_qt_box_raw <- renderPlotly(
+        plot_ly(pg_ints_raw_melt_doe %>% filter(type=="sample") %>%  arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+          layout(yaxis=list(title="Log2 Intensity "),
+                 xaxis=list(title="Sample", 
+                            categoryorder= "array",
+                            categoryarray=~sample.type))
+      )
+      
+      ## lfq
+      if(LFQRun=="Y"){
+        pg_ints_lfq_melt_doe$value = as.numeric(pg_ints_lfq_melt_doe$value)
+        output$nc_qt_box_lfq <- renderPlotly(
+          plot_ly(pg_ints_lfq_melt_doe %>% filter(type=="sample") %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+            layout(yaxis=list(title="Log2 Intensity "),
+                   xaxis=list(title="Sample", 
+                              categoryorder= "array",
+                              categoryarray=~sample.type))
+        )
+      }
+      
+      
+      # density
+      ## raw
+      output$nc_qt_den_raw <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()
+        )
+      )
+      
+      output$nc_qt_den_raw_split <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()+
+            facet_wrap(~ sample.type)
+        )
+      )
+      ## lfq
+      if(LFQRun=="Y"){
+        output$nc_qt_den_lfq <- renderPlotly(
+          ggplotly(
+            ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+              stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+              labs(x="Log2 Intensity", y="Density")+
+              theme_minimal()
+          )
+        )
+        output$nc_qt_den_lfq_split <- renderPlotly(
+          ggplotly(
+            ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+              stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+              labs(x="Log2 Intensity", y="Density")+
+              theme_minimal()+
+              facet_wrap(~ sample.type)
+          )
+        )
+      }
+      
+    }
+    
+
     ################################################################################################
     # end
     
@@ -1229,98 +1516,328 @@ server <- function(input, output, session){
   
   observeEvent(input$start,{
     qc_allow <- 0
+    useSweetAlert()
     
+    progressSweetAlert(
+      session = session,
+      id = "pb1",
+      title = "In progress",
+      striped = TRUE,
+      value = 0
+    )
+    Sys.sleep(2)
+    updateProgressBar(session = session, id = "pb1", value = 10)
     ### 1 proteinGroups.txt
     if(!isTruthy(input$pg_file)){
-      createAlert(session, "alert1a", alertId = "a1a",
-                  style = "danger",
-                  content = "The 'proteinGroups.txt' is required!")
-      qc_allow = qc_allow + 1
+      closeSweetAlert()
+      shinyalert(title = "The 'proteinGroups.txt' is required!!", 
+                 text = "Please upload the file and try again.", 
+                 type = "error")
+      
     }else{
-      closeAlert(session, "a1a")
-      closeAlert(session, "a10")
-      updateProgressBar(session = session, id = "pb1", value = 10, total = 100)
+      
       pg_response()
-      updateProgressBar(session = session, id = "pb1", value = 20, total = 100)
+      updateProgressBar(session = session, id = "pb1", value = 20)
+      
+      ### 6 prefix
+      if(!isTruthy(input$prefix)){
+        closeSweetAlert()
+        shinyalert(title = "The 'prefix' is required!!", 
+                   text = "Please type the 'prefix' and click 'Start QC' to try again.", 
+                   type = "input",
+                   inputType = "text",
+                   inputId = "prefix")
+        
+        qc_allow = qc_allow + 1
+      }else{
+        shinyBS::closeAlert(session, "a6")
+        updateProgressBar(session = session, id = "pb1", value = 30)
+        
+        ### 2 peptides.txt
+        if(isTruthy(input$pt_file)){
+          pt_response()
+        }
+        updateProgressBar(session = session, id = "pb1", value = 40)
+        
+        ### 3 msms.txt
+        ### 4 summary.txt
+        if(isTruthy(input$ms_file)){
+          if(isTruthy(input$sum_file)){
+            ms_sum_response()
+          }
+        }
+        
+        updateProgressBar(session = session, id = "pb1", value = 60)
+        
+        ### 5 doe.txt
+        if(isTruthy(input$doe_file)){
+          doe_response()
+        }
+        updateProgressBar(session = session, id = "pb1", value = 80)
+        Sys.sleep(2)
+        updateProgressBar(session = session, id = "pb1", value = 100)
+        Sys.sleep(2)
+        closeSweetAlert(session = session)
+        shinyalert(title = "QC is finished!", text = "Please check the results by clicking the tabs in the sidebar.", type = "success")
+        
+      }
     }
-    ### 6 prefix
-    if(!isTruthy(input$prefix)){
-      createAlert(session, "alert6", alertId = "a6",
-                  style = "danger",
-                  content = "Prefix is required!")
-      qc_allow = qc_allow + 1
-    }else{
-      closeAlert(session, "a6")
-    }
+    
+
     ### confirm the required inputs are there
-    if(qc_allow != 0){
-      createAlert(session, "alert7", alertId = "a7",
-                  style = "danger",
-                  content = "Please provide required 'proteinGroups.txt' or prefix to perform the QC! ")
-      updateProgressBar(session = session, id = "pb1", status = "danger", value = 100, total = 100)
-    }else{
-      closeAlert(session, "a7")
-      updateProgressBar(session = session, id = "pb1", value = 30, total = 100)
-    }
-    ### 2 peptides.txt
-    if(!isTruthy(input$pt_file)){
-      createAlert(session, "alert2a", alertId = "a2a",
-                  style = "info",
-                  content = "No peptides.txt provided.")
-      output$pt_descrp <- renderText({
-        paste0("No peptides.txt is provided in this analysis.")
-      })
-    }else{
-      closeAlert(session, "a2a")
-      pt_response()
-      updateProgressBar(session = session, id = "pb1", value = 40, total = 100)
-    }
-    ### 3 msms.txt
-    if(!isTruthy(input$ms_file)){
-      createAlert(session, "alert3a", alertId = "a3a",
-                  style = "info",
-                  content = "No msms.txt provided.")
-    }else{
-      closeAlert(session, "a3a")
-      if(isTruthy(input$sum_file)){
-        ms_sum_response()
-      }
-    }
-    ### 4 summary.txt
-    if(!isTruthy(input$sum_file)){
-      createAlert(session, "alert4a", alertId = "a4a",
-                  style = "info",
-                  content = "No summary.txt provided.")
-    }else{
-      closeAlert(session, "a4a")
-      if(isTruthy(input$ms_file)){
-        ms_sum_response()
-        updateProgressBar(session = session, id = "pb1", value = 60, total = 100)
-      }
-    }
-    ### 5 doe.txt
-    if(!isTruthy(input$doe_file)){
-      createAlert(session, "alert5e", alertId = "a5e",
-                  style = "info",
-                  content = "No DOE provided.")
-      if(isTruthy(input$pg_file)){
-        pg_file <- read.table(input$pg_file$datapath, header = T, sep = "\t")
-        int_col <- pg_file %>% 
-          select(starts_with("Intensity"))
-        pg_sample_count <- ncol(int_col)-1
-        output$doe_descrp <- renderText({
-          paste0("There are ", pg_sample_count, " samples in the data")
-        })
-      }
-    }else{
-      updateProgressBar(session = session, id = "pb1", value = 80, total = 100)
-      closeAlert(session, "a5e")
-      doe_response()
-      updateProgressBar(session = session, id = "pb1", value = 100, total = 100)
-    }  
+    #if(qc_allow != 0){
+    #  createAlert(session, "alert7", alertId = "a7",
+    #              style = "danger",
+    #              content = "Please provide required 'proteinGroups.txt' or prefix to perform the QC! ")
+    #  updateProgressBar(session = session, id = "pb1", status = "danger", value = 100)
+    #}else{
+    #  shinyBS::closeAlert(session, "a7")
+      
+    #}
+    
+        
   })
   
- 
+  ###################################################################################
+  
+  observeEvent(input$st_selected_raw,{
+    
+    # read pg and doe first
+    if(isTruthy(input$pg_file$datapath)){
+      pg <- read.table(input$pg_file$datapath, header = T, sep = "\t", stringsAsFactors = F, quote = "\"", comment.char = "")
+    }else{
+      pg <- readRDS("demo_run_file/pg_example.rds")
+    }
+    
+    if(isTruthy(input$doe_file$datapath)){
+      doe_file <- input$doe_file$datapath
+      doe <- read.table(doe_file, sep = input$sep, header = T)
+    }else{
+      doe <- readRDS("demo_run_file/doe_example.rds")
+    }
+    
+    parsed_pg <- process_pg(pg)
+    
+    # check LFQ
+    pg_lfq_col <- parsed_pg %>% 
+      select(starts_with("LFQ"))
+    if(length(colnames(pg_lfq_col))>0){
+      LFQRun <- "Y"
+    }else{
+      LFQRun <- "N"
+    }
+    
+    colnames(doe) <- gsub(" ", ".", colnames(doe))
+    colnames(doe) <- tolower(colnames(doe))
+    doe$type <- tolower(doe$type)
+    
+    doe$sample.id <- gsub(" ", ".", doe$sample.id)
+    doe$sample.id <- gsub("-", ".", doe$sample.id)
+    
+    table_log2_clean_raw <- getLog2CleanTable(parsed_pg, "raw")
+    
+    melt_table_name_raw <- getMeltwithNames(table_log2_clean_raw)
+    melt_table_name_raw_doe <- melt_table_name_raw %>% 
+      left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
+    
+    wide_sampletype_table_raw <- countMeanbyProteinSampletypeDoe(melt_table_name_raw_doe)
+    name_col_st_raw <- wide_sampletype_table_raw[,c(1:3)]
+    
+    st <- input$st_selected_raw
+    display_table_raw <- data.frame(name_col_st_raw, wide_sampletype_table_raw[,st])
+    colnames(display_table_raw)[4] <- "Log2.Intensity"
+    display_table_raw <- display_table_raw %>% arrange(desc(Log2.Intensity))
+    display_table_raw <- display_table_raw[c(1:20),]
+    display_table_raw <- rbind(c(st,"","",""), display_table_raw)
+    
+    output$top20_st_raw <- renderTable(
+      #long_sampletype_top20_raw, striped = TRUE
+      display_table_raw, striped=TRUE
+    )
+    shinyalert(title = "Table is updated!", text = "", type = "success")
+  })
+  
+  
+  ###################################################################################
+  
+  observeEvent(input$st_selected_lfq,{
+    
+    if(isTruthy(input$pg_file$datapath)){
+      pg <- read.table(input$pg_file$datapath, header = T, sep = "\t", stringsAsFactors = F, quote = "\"", comment.char = "")
+    }else{
+      pg <- readRDS("demo_run_file/pg_example.rds")
+    }
+    
+    if(isTruthy(input$doe_file$datapath)){
+      doe_file <- input$doe_file$datapath
+      doe <- read.table(doe_file, sep = input$sep, header = T)
+    }else{
+      doe <- readRDS("demo_run_file/doe_example.rds")
+    }
+    
+    parsed_pg <- process_pg(pg)
+    
+    # check LFQ
+    pg_lfq_col <- parsed_pg %>% 
+      select(starts_with("LFQ"))
+    if(length(colnames(pg_lfq_col))>0){
+      LFQRun <- "Y"
+    }else{
+      LFQRun <- "N"
+    }
+    
+  
+    colnames(doe) <- gsub(" ", ".", colnames(doe))
+    colnames(doe) <- tolower(colnames(doe))
+    doe$type <- tolower(doe$type)
+    
+    doe$sample.id <- gsub(" ", ".", doe$sample.id)
+    doe$sample.id <- gsub("-", ".", doe$sample.id)
+    
+    table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
+    
+    melt_table_name_lfq <- getMeltwithNames(table_log2_clean_lfq)
+    melt_table_name_lfq_doe <- melt_table_name_lfq %>% 
+      left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
+    
+    wide_sampletype_table_lfq <- countMeanbyProteinSampletypeDoe(melt_table_name_lfq_doe)
+    name_col_st_lfq <- wide_sampletype_table_lfq[,c(1:3)]
+    
+    st <- input$st_selected_lfq
+    display_table_lfq <- data.frame(name_col_st_lfq, wide_sampletype_table_lfq[,st])
+    colnames(display_table_lfq)[4] <- "Log2.LFQ.Intensity"
+    display_table_lfq <- display_table_lfq %>% arrange(desc(Log2.LFQ.Intensity))
+    display_table_lfq <- display_table_lfq[c(1:20),]
+    display_table_lfq <- rbind(c(st,"","",""), display_table_lfq)
+    
+    output$top20_st_lfq <- renderTable(
+      #long_sampletype_top20_lfq, striped = TRUE
+      display_table_lfq, striped=TRUE
+    )
+    shinyalert(title = "Table is updated!", text = "", type = "success")
+  })
+  
+  
+  ###################################################################################
+  observeEvent(input$t_selected_raw,{
+    
+    if(isTruthy(input$pg_file$datapath)){
+      pg <- read.table(input$pg_file$datapath, header = T, sep = "\t", stringsAsFactors = F, quote = "\"", comment.char = "")
+    }else{
+      pg <- readRDS("demo_run_file/pg_example.rds")
+    }
+    
+    if(isTruthy(input$doe_file$datapath)){
+      doe_file <- input$doe_file$datapath
+      doe <- read.table(doe_file, sep = input$sep, header = T)
+    }else{
+      doe <- readRDS("demo_run_file/doe_example.rds")
+    }
+    
+    parsed_pg <- process_pg(pg)
+    
+    # check LFQ
+    pg_lfq_col <- parsed_pg %>% 
+      select(starts_with("LFQ"))
+    if(length(colnames(pg_lfq_col))>0){
+      LFQRun <- "Y"
+    }else{
+      LFQRun <- "N"
+    }
+    
+    
+    colnames(doe) <- gsub(" ", ".", colnames(doe))
+    colnames(doe) <- tolower(colnames(doe))
+    doe$type <- tolower(doe$type)
+    
+    doe$sample.id <- gsub(" ", ".", doe$sample.id)
+    doe$sample.id <- gsub("-", ".", doe$sample.id)
+    
+    table_log2_clean_raw <- getLog2CleanTable(parsed_pg, "raw")
+    
+    melt_table_name_raw <- getMeltwithNames(table_log2_clean_raw)
+    melt_table_name_raw_doe <- melt_table_name_raw %>% 
+      left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
+    
+    wide_type_table_raw <- countMeanbyProteinTypeDoe(melt_table_name_raw_doe)
+    name_col_t_raw <- wide_type_table_raw[,c(1:3)]
+    
+    t <- input$t_selected_raw
+    display_table_raw <- data.frame(name_col_t_raw, wide_type_table_raw[,t])
+    colnames(display_table_raw)[4] <- "Log2.Intensity"
+    display_table_raw <- display_table_raw %>% arrange(desc(Log2.Intensity))
+    display_table_raw <- display_table_raw[c(1:20),]
+    display_table_raw <- rbind(c(t,"","",""), display_table_raw)
+    
+    output$top20_t_raw <- renderTable(
+      #long_sampletype_top20_raw, striped = TRUE
+      display_table_raw, striped=TRUE
+    )
+    shinyalert(title = "Table is updated!", text = "", type = "success")
+  })
+  
+  ###################################################################################
+  observeEvent(input$t_selected_lfq,{
+    # read pg and doe first
+
+    if(isTruthy(input$pg_file$datapath)){
+      pg <- read.table(input$pg_file$datapath, header = T, sep = "\t", stringsAsFactors = F, quote = "\"", comment.char = "")
+    }else{
+      pg <- readRDS("demo_run_file/pg_example.rds")
+    }
+    
+    if(isTruthy(input$doe_file$datapath)){
+      doe_file <- input$doe_file$datapath
+      doe <- read.table(doe_file, sep = input$sep, header = T)
+    }else{
+      doe <- readRDS("demo_run_file/doe_example.rds")
+    }
+    
+    parsed_pg <- process_pg(pg)
+    
+    # check LFQ
+    pg_lfq_col <- parsed_pg %>% 
+      select(starts_with("LFQ"))
+    if(length(colnames(pg_lfq_col))>0){
+      LFQRun <- "Y"
+    }else{
+      LFQRun <- "N"
+    }
+    
+    colnames(doe) <- gsub(" ", ".", colnames(doe))
+    colnames(doe) <- tolower(colnames(doe))
+    doe$type <- tolower(doe$type)
+    
+    doe$sample.id <- gsub(" ", ".", doe$sample.id)
+    doe$sample.id <- gsub("-", ".", doe$sample.id)
+    
+    table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
+    
+    melt_table_name_lfq <- getMeltwithNames(table_log2_clean_lfq)
+    melt_table_name_lfq_doe <- melt_table_name_lfq %>% 
+      left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
+    
+    wide_type_table_lfq <- countMeanbyProteinTypeDoe(melt_table_name_lfq_doe)
+    name_col_t_lfq <- wide_type_table_lfq[,c(1:3)]
+    
+    t <- input$t_selected_lfq
+    display_table_lfq <- data.frame(name_col_t_lfq, wide_type_table_lfq[,t])
+    colnames(display_table_lfq)[4] <- "Log2.Intensity"
+    display_table_lfq <- display_table_lfq %>% arrange(desc(Log2.Intensity))
+    display_table_lfq <- display_table_lfq[c(1:20),]
+    display_table_lfq <- rbind(c(t,"","",""), display_table_lfq)
+    
+    output$top20_t_lfq <- renderTable(
+      #long_sampletype_top20_raw, striped = TRUE
+      display_table_lfq, striped=TRUE
+    )
+    shinyalert(title = "Table is updated!", text = "", type = "success")
+  })
+  
+  
+  
+  
+  
   ###################################################################################
   
   ##############################################
@@ -1329,13 +1846,12 @@ server <- function(input, output, session){
   
   #### 1 proteinGroups.txt
   pg_ex_response <- reactive({
-    pg_ex <- readRDS("example/pg.example")
-    
+    pg_ex <- readRDS("demo_run_file/pg_example.rds")
     parsed_pg <- process_pg(pg_ex)
     
     ################################################################################################
     # datasets for download
-    
+
     table_log2_raw <- getLog2Table(parsed_pg, "raw")
     table_log2_lfq <- getLog2Table(parsed_pg, "lfq")
     table_log2_clean_raw <- getLog2CleanTable(parsed_pg, "raw")
@@ -1348,7 +1864,7 @@ server <- function(input, output, session){
         paste0("demo","_log2_raw_data_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(table_log2_raw, file, sep = "\t")
+        write.table(table_log2_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -1357,7 +1873,7 @@ server <- function(input, output, session){
         paste0("demo","_log2_lfq_data_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(table_log2_lfq, file, sep = "\t")
+        write.table(table_log2_lfq, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -1366,7 +1882,7 @@ server <- function(input, output, session){
         paste0("demo","_log2_raw_clean_data_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(table_log2_clean_raw, file, sep = "\t")
+        write.table(table_log2_clean_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -1375,7 +1891,7 @@ server <- function(input, output, session){
         paste0("demo","_log2_lfq_clean_data_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(table_log2_clean_lfq, file, sep = "\t")
+        write.table(table_log2_clean_lfq, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -1384,7 +1900,7 @@ server <- function(input, output, session){
         paste0("demo","_log2_raw_contaminant_data_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(table_contam_log2_raw, file, sep = "\t")
+        write.table(table_contam_log2_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -1393,7 +1909,7 @@ server <- function(input, output, session){
         paste0("demo","_log2_lfq_contaminant_data_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(table_contam_log2_lfq, file, sep = "\t")
+        write.table(table_contam_log2_lfq, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -1622,7 +2138,7 @@ server <- function(input, output, session){
         paste0("demo","_mean_log2_raw_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(annotated_mean_table_raw, file, sep = "\t")
+        write.table(annotated_mean_table_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -1631,7 +2147,7 @@ server <- function(input, output, session){
         paste0("demo","_mean_log2_lfq_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(annotated_mean_table_lfq, file, sep = "\t")
+        write.table(annotated_mean_table_lfq, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -1642,14 +2158,16 @@ server <- function(input, output, session){
     pc12_raw <- getPC12Percentage(table_log2_clean_raw)
     
     output$pca_raw <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_raw, aes(x=PC1, y=PC2, color=sample) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
-               y=paste0("PC2 (", pc12_raw[2], "%)"))
-      )
-      #plot_ly(pca_table_raw, x=~PC1, y=~PC2, type = "scatter", color=~sample, text=~sample, marker=list(size=16, opacity=0.5))
+      #ggplotly(
+      #  ggplot(pca_table_raw, aes(x=PC1, y=PC2, color=sample) )+ 
+      #    geom_point(alpha=0.5, size=3)+
+      #    theme_bw()+
+      #    labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
+      #         y=paste0("PC2 (", pc12_raw[2], "%)"))
+      #)
+      plot_ly(pca_table_raw, x=~PC1, y=~PC2, type = "scatter", color=~sample, text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+        layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+               yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
     )
     ## lfq
     pca_table_lfq <- getPCAtable(table_log2_clean_lfq)
@@ -1657,14 +2175,16 @@ server <- function(input, output, session){
     
     
     output$pca_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_lfq, aes(x=PC1, y=PC2, color=sample) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
-               y=paste0("PC2 (", pc12_lfq[2], "%)"))
-      )
-      #plot_ly(pca_table_lfq, x=~PC1, y=~PC2, type = "scatter", color=~sample, text=~sample, marker=list(size=16, opacity=0.5))
+      #ggplotly(
+      #  ggplot(pca_table_lfq, aes(x=PC1, y=PC2, color=sample) )+ 
+      #    geom_point(alpha=0.5, size=3)+
+      #    theme_bw()+
+      #    labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
+      #         y=paste0("PC2 (", pc12_lfq[2], "%)"))
+      #)
+      plot_ly(pca_table_lfq, x=~PC1, y=~PC2, type = "scatter", color=~sample, text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+        layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+               yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
       
     )
     
@@ -1675,7 +2195,7 @@ server <- function(input, output, session){
   
   #### 2 peptides.txt
   pt_ex_response <- reactive({
-    pt <- readRDS("example/pt.example")
+    pt <- readRDS("demo_run_file/pt_example.rds")
     
     # get the average of Cysteine
     cys_avg = sum(pt$C.Count)/nrow(pt)
@@ -1710,8 +2230,8 @@ server <- function(input, output, session){
   #### 3 msms.txt
   #### 4 summary.txt
   ms_sum_ex_response <- reactive({
-    ms <- readRDS("example/ms.example")
-    sumtxt <- readRDS("example/sm.example")
+    ms <- readRDS("demo_run_file/ms_example.rds")
+    sumtxt <- readRDS("demo_run_file/sm_example.rds")
     
     ms_clvg_table <- ms %>% 
       select(Raw.file, Missed.cleavages) %>% 
@@ -1735,7 +2255,7 @@ server <- function(input, output, session){
   
   #### 5 doe.txt
   doe_ex_response <- reactive({
-    doe <- readRDS("example/doe.example")
+    doe <- readRDS("demo_run_file/doe_example.rds")
     doe$sample.id <- gsub(" ", ".", doe$sample.id)
     doe$sample.id <- gsub("-", ".", doe$sample.id)
     
@@ -1744,7 +2264,7 @@ server <- function(input, output, session){
 
     ################################################################################################
     # read pg as well
-    pg <- readRDS("example/pg.example")
+    pg <- readRDS("demo_run_file/pg_example.rds")
     parsed_pg <- process_pg(pg)
     
     ################################################################################################
@@ -1830,7 +2350,7 @@ server <- function(input, output, session){
     # peptide counts
     # get peptide count by sample.type and type
     
-    pt <- readRDS("example/pt.example")
+    pt <- readRDS("demo_run_file/pt_example.rds")
     pep_count_doe <- getPepCountDoe(pt, doe)
     
     output$pt_count_st <- renderPlotly(
@@ -1905,7 +2425,7 @@ server <- function(input, output, session){
     
     output$pg_int_vio_raw_doe <- renderPlotly(
       ggplotly(
-        ggplot(pg_ints_raw_melt_doe, aes(x=reorder(sample,run.order), y=value, fill=sample.type))+
+        ggplot(pg_ints_raw_melt_doe, aes(x=reorder(sample,run.order), y=value, color=sample.type, fill=sample.type))+
           geom_violin()+
           theme_minimal()+
           labs(x="Sample by Run order", y="Log2 Intensity")+
@@ -1928,7 +2448,7 @@ server <- function(input, output, session){
     
     output$pg_int_vio_lfq_doe <- renderPlotly(
       ggplotly(
-        ggplot(pg_ints_lfq_melt_doe, aes(x=reorder(sample,run.order), y=value, fill=sample.type))+
+        ggplot(pg_ints_lfq_melt_doe, aes(x=reorder(sample,run.order), y=value, color=sample.type, fill=sample.type))+
           geom_violin()+
           theme_minimal()+
           labs(x="Sample by Run order", y="Log2 Intensity")+
@@ -1945,11 +2465,19 @@ server <- function(input, output, session){
                                  raw=pg_ints_raw_melt_doe$value,
                                  lfq=pg_ints_lfq_melt_doe$value)
     
+    st_num <- length(unique(melt_table_doe$sample.type))
+    if(st_num<=3){
+      n=2
+    }else{
+      n=3
+    }
+    n <- as.numeric(n)
+    
     output$pg_int_st_rawlfq <- renderPlotly(
       melt_table_doe %>% 
         group_by(sample.type) %>% 
         group_map(~ plot_ly(data = ., x=~raw, y=~lfq, color=~sample.type, type="scatter", marker=list(opacity=0.3)), keep = TRUE) %>% 
-        subplot(nrows = 3, shareX = TRUE, shareY = TRUE) %>% 
+        subplot(nrows = n, shareX = TRUE, shareY = TRUE) %>% 
         layout(xaxis=list(title="Raw Intensity"), yaxis=list(title="LFQ Intensity"))
     )
     
@@ -2049,29 +2577,40 @@ server <- function(input, output, session){
     melt_table_name_raw_doe <- melt_table_name_raw %>% 
       left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
     
-    wide_sampletype_sort_table_raw <- countMeanbyProteinSampletypeDoe(melt_table_name_raw_doe)
-    long_sampletype_top20_raw <- getTop20sampletypeTable(wide_sampletype_sort_table_raw)
-    output$top20_st_raw <- renderTable(
-      long_sampletype_top20_raw, striped = TRUE
-    )
     
+    wide_sampletype_table_raw <- countMeanbyProteinSampletypeDoe(melt_table_name_raw_doe)
+    name_col_st_raw <- wide_sampletype_table_raw[,c(1:3)]
+    measure_col_st_raw <- wide_sampletype_table_raw[,c(4:ncol(wide_sampletype_table_raw))]
+    
+    output$sampletype_raw <- renderUI({
+      st_list <- sort(unique(doe$sample.type))
+      selectInput("st_selected_raw", h4("Choose Sample Type"),
+                  choices = st_list, selected = 1)
+    })
+  
     ## lfq
     melt_table_name_lfq <- getMeltwithNames(table_log2_clean_lfq)
     melt_table_name_lfq_doe <- melt_table_name_lfq %>% 
       left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
     
-    wide_sampletype_sort_table_lfq <- countMeanbyProteinSampletypeDoe(melt_table_name_lfq_doe)
-    long_sampletype_top20_lfq <- getTop20sampletypeTable(wide_sampletype_sort_table_lfq)
-    output$top20_st_lfq <- renderTable(
-      long_sampletype_top20_lfq, striped = TRUE
-    )
+    
+    wide_sampletype_table_lfq <- countMeanbyProteinSampletypeDoe(melt_table_name_lfq_doe)
+    name_col_st_lfq <- wide_sampletype_table_lfq[,c(1:3)]
+    measure_col_st_lfq <- wide_sampletype_table_lfq[,c(4:ncol(wide_sampletype_table_lfq))]
+    
+    output$sampletype_lfq <- renderUI({
+      st_list <- sort(unique(doe$sample.type))
+      selectInput("st_selected_lfq", h4("Choose Sample Type"),
+                  choices = st_list, selected = 1)
+    })
+    
     
     output$dwide_sampletype_sort_table_raw <- downloadHandler(
       filename = function(){
         paste0(input$prefix,"_meanBySampletype_log2_raw_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(wide_sampletype_sort_table_raw, file, sep = "\t")
+        write.table(wide_sampletype_table_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -2080,31 +2619,42 @@ server <- function(input, output, session){
         paste0(input$prefix,"_meanBySampletype_log2_lfq_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(wide_sampletype_sort_table_lfq, file, sep = "\t")
+        write.table(wide_sampletype_table_lfq, file, sep = "\t", row.names = FALSE)
       }
     )
     
     # top20 type
     ## raw
-    wide_type_sort_table_raw <- countMeanbyProteinTypeDoe(melt_table_name_raw_doe)
-    long_type_top20_raw <- getTop20TypeTable(wide_type_sort_table_raw)
-    output$top20_t_raw <- renderTable(
-      long_type_top20_raw, striped = TRUE
-    )
+    
+    wide_type_table_raw <- countMeanbyProteinTypeDoe(melt_table_name_raw_doe)
+    name_col_t_raw <- wide_type_table_raw[,c(1:3)]
+    measure_col_t_raw <- wide_type_table_raw[,c(4:ncol(wide_type_table_raw))]
+    
+    output$type_raw <- renderUI({
+      t_list <- sort(unique(doe$type))
+      selectInput("t_selected_raw", h4("Choose Type"),
+                  choices = t_list, selected = 1)
+    })
     
     ## lfq
-    wide_type_sort_table_lfq <- countMeanbyProteinTypeDoe(melt_table_name_lfq_doe)
-    long_type_top20_lfq <- getTop20TypeTable(wide_type_sort_table_lfq)
-    output$top20_t_lfq <- renderTable(
-      long_type_top20_lfq, striped = TRUE
-    )
+    
+    wide_type_table_lfq <- countMeanbyProteinTypeDoe(melt_table_name_lfq_doe)
+    name_col_t_lfq <- wide_type_table_lfq[,c(1:3)]
+    measure_col_t_lfq <- wide_type_table_lfq[,c(4:ncol(wide_type_table_lfq))]
+    
+    output$type_lfq <- renderUI({
+      t_list <- sort(unique(doe$type))
+      selectInput("t_selected_lfq", h4("Choose Type"),
+                  choices = t_list, selected = 1)
+    })  
+    
     
     output$dwide_type_sort_table_raw <- downloadHandler(
       filename = function(){
         paste0(input$prefix,"_meanByType_log2_raw_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(wide_sampletype_sort_table_raw, file, sep = "\t")
+        write.table(wide_type_table_raw, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -2113,7 +2663,7 @@ server <- function(input, output, session){
         paste0(input$prefix,"_meanByType_log2_lfq_",Sys.Date(),".tsv")
       },
       content = function(file){
-        write.table(wide_sampletype_sort_table_lfq, file, sep = "\t")
+        write.table(wide_type_table_lfq, file, sep = "\t", row.names = FALSE)
       }
     )
     
@@ -2124,25 +2674,31 @@ server <- function(input, output, session){
     pc12_raw <- getPC12Percentage(table_log2_clean_raw)
     
     output$pca_st_raw <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_raw_doe, aes(x=PC1, y=PC2, color=sample.type, shape=type) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
-               y=paste0("PC2 (", pc12_raw[2], "%)"))
-      )
-      #plot_ly(pca_table_raw_doe, x=~PC1, y=~PC2, type = "scatter", color=~sample.type, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5))
+      #ggplotly(
+      #  ggplot(pca_table_raw_doe, aes(x=PC1, y=PC2, color=sample.type, shape=type) )+ 
+      #    geom_point(alpha=0.5, size=3)+
+      #    theme_bw()+
+      #    labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
+      #         y=paste0("PC2 (", pc12_raw[2], "%)"))
+      #)
+      plot_ly(pca_table_raw_doe, x=~PC1, y=~PC2, type = "scatter", color=~sample.type, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+        layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE),
+               yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
+      
+      
     )
     
     output$pca_ro_raw <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_raw_doe, aes(x=PC1, y=PC2, color=run.order, shape=type) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
-               y=paste0("PC2 (", pc12_raw[2], "%)"))
-      )
-      #plot_ly(pca_table_raw_doe, x=~PC1, y=~PC2, type = "scatter", color=~run.order, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5))
+      #ggplotly(
+      #  ggplot(pca_table_raw_doe, aes(x=PC1, y=PC2, color=run.order, shape=type) )+ 
+      #    geom_point(alpha=0.5, size=3)+
+      #    theme_bw()+
+      #    labs(x=paste0("PC1 (", pc12_raw[1], "%)"),
+      #         y=paste0("PC2 (", pc12_raw[2], "%)"))
+      #)
+      plot_ly(pca_table_raw_doe, x=~PC1, y=~PC2, type = "scatter", color=~run.order, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+        layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE),
+               yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
     )
     
     ## lfq
@@ -2150,25 +2706,29 @@ server <- function(input, output, session){
     pc12_lfq <- getPC12Percentage(table_log2_clean_lfq)
     
     output$pca_st_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_lfq_doe, aes(x=PC1, y=PC2, color=sample.type, shape=type) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
-               y=paste0("PC2 (", pc12_lfq[2], "%)"))
-      )
-      #plot_ly(pca_table_lfq_doe, x=~PC1, y=~PC2, type = "scatter", color=~sample.type, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5))
+      #ggplotly(
+      #  ggplot(pca_table_lfq_doe, aes(x=PC1, y=PC2, color=sample.type, shape=type) )+ 
+      #    geom_point(alpha=0.5, size=3)+
+      #    theme_bw()+
+      #    labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
+      #         y=paste0("PC2 (", pc12_lfq[2], "%)"))
+      #)
+      plot_ly(pca_table_lfq_doe, x=~PC1, y=~PC2, type = "scatter", color=~sample.type, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+        layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE),
+               yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
     )
     
     output$pca_ro_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(pca_table_lfq_doe, aes(x=PC1, y=PC2, color=run.order, shape=type) )+ 
-          geom_point(alpha=0.5, size=3)+
-          theme_bw()+
-          labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
-               y=paste0("PC2 (", pc12_lfq[2], "%)"))
-      )
-      #plot_ly(pca_table_lfq_doe, x=~PC1, y=~PC2, type = "scatter", color=~run.order, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5))
+      #ggplotly(
+      #  ggplot(pca_table_lfq_doe, aes(x=PC1, y=PC2, color=run.order, shape=type) )+ 
+      #    geom_point(alpha=0.5, size=3)+
+      #    theme_bw()+
+      #    labs(x=paste0("PC1 (", pc12_lfq[1], "%)"),
+      #         y=paste0("PC2 (", pc12_lfq[2], "%)"))
+      #)
+      plot_ly(pca_table_lfq_doe, x=~PC1, y=~PC2, type = "scatter", color=~run.order, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+        layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)")),
+               yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)")))
     )
     
     ################################################################################################
@@ -2192,88 +2752,186 @@ server <- function(input, output, session){
     updateProgressBar(session = session, id = "pb2", value =70, total = 100)
     ################################################################################################
     # quantro
-    ## raw
-    qt_raw <- doQuantro(table_log2_clean_raw, doe)
-    
-    output$qt_qt_raw <- renderTable(
-      qt_raw
-    )
-    qt_raw_a <- doQuantroAnova(table_log2_clean_raw, doe)
-    output$qt_anov_raw <- renderTable(
-      qt_raw_a, striped = TRUE
-    )
-    
-    ## lfq
-    qt_lfq <- doQuantro(table_log2_clean_lfq, doe)
-    output$qt_qt_lfq <- renderTable(
-      qt_lfq
-    )
-    qt_lfq_a <- doQuantroAnova(table_log2_clean_lfq, doe)
-    output$qt_anov_lfq <- renderTable(
-      qt_lfq_a, striped = TRUE
-    )
-    
-    # use pg_ints_raw_melt_doe or pg_ints_lfq_melt_doe
-    # boxplot
-    ## raw
-    pg_ints_raw_melt_doe$value = as.numeric(pg_ints_raw_melt_doe$value)
-    pg_ints_raw_melt_doe <- pg_ints_raw_melt_doe %>% arrange(sample.type)
-    output$qt_box_raw <- renderPlotly(
-      plot_ly(pg_ints_raw_melt_doe, x=~sample, y=~value, type="box", color=~sample.type) %>% 
-        layout(yaxis=list(title="Log2 Intensity "),
-               xaxis=list(title="Sample", 
-                          categoryorder= "array",
-                          categoryarray=~sample.type))
-    )
-    
-    ## lfq
-    pg_ints_lfq_melt_doe$value = as.numeric(pg_ints_lfq_melt_doe$value)
-    output$qt_box_lfq <- renderPlotly(
-      plot_ly(pg_ints_lfq_melt_doe %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
-        layout(yaxis=list(title="Log2 Intensity "),
-               xaxis=list(title="Sample", 
-                          categoryorder= "array",
-                          categoryarray=~sample.type))
-    )
-    
-    # density
-    ## raw
-    output$qt_den_raw <- renderPlotly(
-      ggplotly(
-        ggplot(pg_ints_raw_melt_doe, aes(x=value))+
-          stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
-          labs(x="Log2 Intensity", y="Density")+
-          theme_minimal()
+    # check the number of sample.type is >= 2
+    if(length(unique(doe$sample.type))<2){
+      output$qt_notallow <- renderText(
+        "The number of 'sample.type' is less than 2, Quantro test can not be applied!"
       )
-    )
+    }else{
+      output$qt_notallow <- renderText(
+        ""
+      )
+      ## raw
+      qt_raw <- doQuantro(table_log2_clean_raw, doe)
+      output$qt_qt_raw <- renderTable(
+        qt_raw
+      )
+      qt_raw_a <- doQuantroAnova(table_log2_clean_raw, doe)
+      output$qt_anov_raw <- renderTable(
+        qt_raw_a, striped = TRUE
+      )
+      
+      ## lfq
+      qt_lfq <- doQuantro(table_log2_clean_lfq, doe)
+      output$qt_qt_lfq <- renderTable(
+        qt_lfq
+      )
+      qt_lfq_a <- doQuantroAnova(table_log2_clean_lfq, doe)
+      output$qt_anov_lfq <- renderTable(
+        qt_lfq_a, striped = TRUE
+      )
+      
+      # use pg_ints_raw_melt_doe or pg_ints_lfq_melt_doe
+      # boxplot
+      ## raw
+      pg_ints_raw_melt_doe$value = as.numeric(pg_ints_raw_melt_doe$value)
+      output$qt_box_raw <- renderPlotly(
+        plot_ly(pg_ints_raw_melt_doe %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+          layout(yaxis=list(title="Log2 Intensity "),
+                 xaxis=list(title="Sample", 
+                            categoryorder= "array",
+                            categoryarray=~sample.type))
+      )
+      
+      ## lfq
+      pg_ints_lfq_melt_doe$value = as.numeric(pg_ints_lfq_melt_doe$value)
+      output$qt_box_lfq <- renderPlotly(
+        plot_ly(pg_ints_lfq_melt_doe %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+          layout(yaxis=list(title="Log2 Intensity "),
+                 xaxis=list(title="Sample", 
+                            categoryorder= "array",
+                            categoryarray=~sample.type))
+      )
+      
+      # density
+      ## raw
+      output$qt_den_raw <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe, aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()
+        )
+      )
+      
+      output$qt_den_raw_split <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe, aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()+
+            facet_wrap(~ sample.type)
+        )
+      )
+      ## lfq
+      output$qt_den_lfq <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe, aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()
+        )
+      )
+      output$qt_den_lfq_split <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe, aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()+
+            facet_wrap(~ sample.type)
+        )
+      )
+    }
     
-    output$qt_den_raw_split <- renderPlotly(
-      ggplotly(
-        ggplot(pg_ints_raw_melt_doe, aes(x=value))+
-          stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
-          labs(x="Log2 Intensity", y="Density")+
-          theme_minimal()+
-          facet_wrap(~ sample.type)
+    
+    # quantro --- No control
+    nc_doe <- doe %>% filter(type=="sample")
+    if(length(unique(nc_doe$sample.type))<2){
+      output$nc_qt_notallow <- renderText(
+        "The number of 'sample.type' after filtering out the control samples is less than 2, Quantro test can not be applied!"
       )
-    )
-    ## lfq
-    output$qt_den_lfq <- renderPlotly(
-      ggplotly(
-        ggplot(pg_ints_raw_melt_doe, aes(x=value))+
-          stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
-          labs(x="Log2 Intensity", y="Density")+
-          theme_minimal()
+    }else{
+      ## raw
+      nc_qt_raw <- doQuantroNoControl(table_log2_clean_raw, doe)
+      output$nc_qt_qt_raw <- renderTable(
+        nc_qt_raw
       )
-    )
-    output$qt_den_lfq_split <- renderPlotly(
-      ggplotly(
-        ggplot(pg_ints_raw_melt_doe, aes(x=value))+
-          stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
-          labs(x="Log2 Intensity", y="Density")+
-          theme_minimal()+
-          facet_wrap(~ sample.type)
+      nc_qt_raw_a <- doQuantroNoControlAnova(table_log2_clean_raw, doe)
+      output$nc_qt_anov_raw <- renderTable(
+        nc_qt_raw_a, striped = TRUE
       )
-    )
+      
+      ## lfq
+      nc_qt_lfq <- doQuantroNoControl(table_log2_clean_lfq, doe)
+      output$nc_qt_qt_lfq <- renderTable(
+        nc_qt_lfq
+      )
+      nc_qt_lfq_a <- doQuantroNoControlAnova(table_log2_clean_lfq, doe)
+      output$nc_qt_anov_lfq <- renderTable(
+        nc_qt_lfq_a, striped = TRUE
+      )
+      
+      # use pg_ints_raw_melt_doe or pg_ints_lfq_melt_doe
+      # boxplot
+      ## raw
+      pg_ints_raw_melt_doe$value = as.numeric(pg_ints_raw_melt_doe$value)
+      output$nc_qt_box_raw <- renderPlotly(
+        plot_ly(pg_ints_raw_melt_doe %>% filter(type=="sample") %>%  arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+          layout(yaxis=list(title="Log2 Intensity "),
+                 xaxis=list(title="Sample", 
+                            categoryorder= "array",
+                            categoryarray=~sample.type))
+      )
+      
+      ## lfq
+      pg_ints_lfq_melt_doe$value = as.numeric(pg_ints_lfq_melt_doe$value)
+      output$nc_qt_box_lfq <- renderPlotly(
+        plot_ly(pg_ints_lfq_melt_doe %>% filter(type=="sample") %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+          layout(yaxis=list(title="Log2 Intensity "),
+                 xaxis=list(title="Sample", 
+                            categoryorder= "array",
+                            categoryarray=~sample.type))
+      )
+      
+      # density
+      ## raw
+      output$nc_qt_den_raw <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()
+        )
+      )
+      
+      output$nc_qt_den_raw_split <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()+
+            facet_wrap(~ sample.type)
+        )
+      )
+      ## lfq
+      output$nc_qt_den_lfq <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()
+        )
+      )
+      output$nc_qt_den_lfq_split <- renderPlotly(
+        ggplotly(
+          ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+            stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+            labs(x="Log2 Intensity", y="Density")+
+            theme_minimal()+
+            facet_wrap(~ sample.type)
+        )
+      )
+    }
     
     ################################################################################################
     # end
@@ -2286,28 +2944,81 @@ server <- function(input, output, session){
   
   ### major demo process ###
   observeEvent(input$demo, {
-    
+    useSweetAlert()
+    progressSweetAlert(
+      session = session,
+      id = "pb2",
+      title = "In progress",
+      striped = TRUE,
+      value = 0
+    )
     ### 1 proteinGroups.txt
-    updateProgressBar(session = session, id = "pb2", value = 10, total = 100)
+    updateProgressBar(session = session, id = "pb2", value = 10)
     pg_ex_response()
-    updateProgressBar(session = session, id = "pb2", value = 20, total = 100)
+    updateProgressBar(session = session, id = "pb2", value = 20)
     
     ### 2 peptides.txt
     pt_ex_response()
-    updateProgressBar(session = session, id = "pb2", value = 40, total = 100)
+    updateProgressBar(session = session, id = "pb2", value = 40)
     
     ### 3 msms.txt
     ### 4 summary.txt
     ms_sum_ex_response()
-    updateProgressBar(session = session, id = "pb2", value = 50, total = 100)
+    updateProgressBar(session = session, id = "pb2", value = 50)
     
     ### 5 doe.txt
-    updateProgressBar(session = session, id = "pb2", value = 60, total = 100)
+    updateProgressBar(session = session, id = "pb2", value = 60)
     doe_ex_response()
-    updateProgressBar(session = session, id = "pb2", value = 100, total = 100)
+    updateProgressBar(session = session, id = "pb2", value = 85)
+    updateProgressBar(session = session, id = "pb2", value = 100)
+    closeSweetAlert(session = session)
+    shinyalert(title = "Demo run is finished", text = "Please check the results by clicking the tabs in the sidebar.", type = "success")
   
   
   })
+  
+  
+  ###################################################################################
+  ###################
+  # generate report #
+  ###################
+  output$report <- downloadHandler(
+    
+    filename = function(){
+      paste0("QC-MQ_report_", Sys.time(),".html")
+    },
+    content = function(file){
+      shiny::withProgress(
+        message = "Generating the report",
+        value = 0,
+        {
+          shiny::incProgress(1/10)
+          Sys.sleep(1)
+          tempReport <- file.path(tempdir(), "report.Rmd")
+          file.copy("report.Rmd", tempReport, overwrite = TRUE)
+          tempCode <- file.path(tempdir(), "functions.R")
+          file.copy("functions.R", tempCode, overwrite = TRUE)
+          shiny::incProgress(3/10)
+          params <- list(
+            pgfile = input$pg_file$datapath,
+            ptfile = input$pt_file$datapath,
+            msfile = input$ms_file$datapath,
+            smfile = input$sum_file$datapath,
+            doefile = input$doe_file$datapath,
+            doe_sep = input$sep
+          )
+          shiny::incProgress(4/10)
+          rmarkdown::render(tempReport, output_file = file,
+                            params = params,
+                            envir = new.env(parent = globalenv()))
+          
+        }
+      )
+      
+    }
+  )
+  
+  
   
 }
 

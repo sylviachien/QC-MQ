@@ -1,22 +1,28 @@
-# app_8
+# app_10
+
 
 ###################################################################################
 # load libraries
 library(shiny)
 library(shinyBS)
+library(shinyjs)
 library(shinydashboard)
 library(shinyFiles)
 library(plotly)
+library(shinyalert)
 library(shinyWidgets)
-
 library(BiocManager)
-options(repos = BiocManager::repositories())
+#options(repos = BiocManager::repositories())
 
 ###################################################################################
+useShinyalert()
+useSweetAlert()
 
 # add logo along with the title in the header
-head <- tags$a(tags$img(src="logo1.png", height=80, width=80), 
+head <- tags$a(href="https://report.pri.bms.com/QC-MQ/",
+               tags$img(src="logo1.png", height=80, width=80), 
                "Quality Control Dashboard for MaxQuant Proteomics Data", target="_blank")
+
 
 
 ui <- dashboardPage(
@@ -57,6 +63,11 @@ ui <- dashboardPage(
   ###################################################################################
   
   dashboardBody(
+    
+    useShinyjs(),
+    useShinyalert(),
+    useSweetAlert(),
+    
     # add reference to CSS file in the www folder from the app directory
     tags$head(
       tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
@@ -69,7 +80,57 @@ ui <- dashboardPage(
         tabName = "upload",
         fluidRow(
           box(
+            title = "Instructions",
+            width = 12,
+            status = "primary",
+            solidHeader = TRUE,
+            h4(strong(span("Run demo QC", style = "color:red"))),
+            HTML(
+              paste(
+                h5(HTML('&emsp;'), strong("   Steps:")),
+                h5(HTML('&emsp;'), strong("   1. Click 'Run Demo' button.")),
+                h5(HTML('&emsp;'), strong("   2. After the success message poping up, browse the results by clicking the tabs in the side menu."))
+              )
+            ),
+            br(),
+            h4(strong(span("Run your own data", style = "color:red"))),
+            HTML(
+              paste(
+                h5(HTML('&emsp;'), strong("   Steps:")),
+                h5(HTML('&emsp;'), strong("   1. Have the output files of MaxQuant(MQ) ready. They are in the combined/txt folder. The minimum uploading requirement to run this QC is the 'proteinGroups.txt'.")),
+                h5(HTML('&emsp;'), strong("   2. If applicable, please upload the other MQ output files: 'peptides.txt', 'msms.txt', and 'summary.txt'.")),
+                h5(HTML('&emsp;'), strong("   3. Prepare the DOE file (ex: doe.txt) in the suggested format:"))
+              )
+            ),
+            HTML(
+              paste(
+                h5(HTML('&emsp;'), HTML('&emsp;'), "- 'Sample.id', 'Run.order', 'Type', and 'Sample.type' columns are required in the DOE."),
+                h5(HTML('&emsp;'), HTML('&emsp;'), "- Only two categories: 'control' and 'sample' in the 'Type' column."),
+                h5(HTML('&emsp;'), HTML('&emsp;'), "- Avoid naming the sample (Sample.id) starting with a number."),
+                h5(HTML('&emsp;'), strong("   4. Upload the DOE file, wrong format of the DOE would stop running QC process.")),
+                h5(HTML('&emsp;'), strong("   5. Click 'Start QC' button.")),
+                h5(HTML('&emsp;'), strong("   6. After the success message poping up, browse the results by clicking the tabs in the side menu."))
+                
+              )
+            ),
+            br(),
+            h4(strong(span("Generate report", style = "color:red"))),
+            HTML(
+              paste(
+                h5(HTML('&emsp;'), strong("   Steps:")),
+                h5(HTML('&emsp;'), strong("   1. Upload the files as described in 'Run your own data'.")),
+                h5(HTML('&emsp;'), strong("   2. Click 'Download the report' button.")),
+                h5(HTML('&emsp;'), strong("   3. QC-MQ report is downloaded."))
+                
+              )
+            )
+          )
+        ),
+        fluidRow(
+          box(
             title = "Upload file(s)",
+            status = "primary",
+            solidHeader = TRUE,
             fileInput(
               inputId = "pg_file",
               label = "Choose the 'proteinGroups.txt' to upload"
@@ -101,47 +162,69 @@ ui <- dashboardPage(
             bsAlert("alert5c"),
             bsAlert("alert5d"),
             bsAlert("alert10"),
-            helpText("The doe.txt must have at least the following columns: 'Sample.id', 'Run.order', 'Type(control/sample)', and 'Sample.type'")
+            helpText("The doe.txt must have at least the following columns: 'Sample.id', 'Run.order', 'Type', and 'Sample.type'. The 'Type' column contains only 'control' and 'sample' categories."),
+            br(),
+            h5(""),
+            actionButton("doe_demo_table", label = "Example of DOE"),
+            tableOutput("doe_example")
             
           ),
           box(
             title = "Input Parameters",
+            status = "primary",
+            solidHeader = TRUE,
             radioButtons("LFQRun",
                          label = "Did you run LFQ in MaxQuant?",
                          choices = list("Yes"="Y", "No"="N"), selected = 'N'),
             radioButtons("spikeinRun",
-                         label = "Did you include spike-in (DigestIF) in the experiment?",
+                         label = "Did you include spike-in (DigestIF, P00000) in the experiment?",
                          choices = list("Yes"="Y", "No"="N"), selected = 'N'),
+            #textInput("custom_spikeinRun",
+            #          label = "Please specify the 'Protein.IDs' of the protein group you would like to check as a spike-in: (only one protein group is allowed each time) (Optional)"),
+            #bsAlert("alert11"),
             textInput("prefix",
                       label = "Output prefix: (Required)"),
             textInput("exp_title",
                       label = "Title of experiment: (Optional)"),
             
             br(),
+            useSweetAlert(),
             actionButton("start", label = "Start QC"),
-            progressBar(
-              id = "pb1",
-              status = "primary",
-              striped = TRUE,
-              value = 0,
-              display_pct = FALSE
-            ),
+            #progressBar(
+            #  id = "pb1",
+            #  status = "primary",
+            #  striped = TRUE,
+            #  value = 0,
+            #  display_pct = FALSE
+            #),
             bsAlert("alert1a"), # pg required
-            bsAlert("alert6"),  # prefix required
+            #bsAlert("alert6"),  # prefix required
             bsAlert("alert2a"),
             bsAlert("alert3a"),
             bsAlert("alert4a"),
             bsAlert("alert5e"),
             bsAlert("alert7"),
             br(),
+            br(),
             actionButton("demo", label = "Run Demo"),
-            progressBar(
-              id = "pb2",
-              status = "info",
-              striped = TRUE,
-              value = 0,
-              display_pct = FALSE
-            )
+            #shinyWidgets::progressBar(
+            #  id = "pb2",
+            #  status = "info",
+            #  striped = TRUE,
+            #  value = 0,
+            #  display_pct = FALSE
+            #),
+            br(),
+            br(),
+            br(),
+            downloadButton("report", label = "Download the report")
+            #progressBar(
+            #  id = "pb3",
+            #  status = "info",
+            #  striped = TRUE,
+            #  value = 0,
+            #  display_pct = FALSE
+            #)
           )
         )
       ),
@@ -188,7 +271,8 @@ ui <- dashboardPage(
           tabPanel(
             "Spike-in(P00000 DIGESTIF)",
             br(),
-            h4(strong(textOutput("spike_descrp"))),
+            h4(strong("Spike-in protein must be included for this analysis.")),
+            
             fluidRow(
               box(
                 title = "Intensity of Spikein",
@@ -221,20 +305,20 @@ ui <- dashboardPage(
                   tabPanel(
                     "Raw Intensity",
                     br(),
-                    h5("Sample with spike-in intenstiy less than mean - 2SD"),
+                    h5("Sample with spike-in intensity less than mean - 2SD"),
                     tableOutput("spikelow_raw"),
                     br(),
-                    h5("Sample with spike-in intenstiy more than mean + 2SD"),
+                    h5("Sample with spike-in intensity more than mean + 2SD"),
                     tableOutput("spikehigh_raw")
                     
                   ),
                   tabPanel(
                     "LFQ Intensity",
                     br(),
-                    h5("Sample with spike-in intenstiy less than mean - 2SD"),
+                    h5("Sample with spike-in intensity less than mean - 2SD"),
                     tableOutput("spikelow_lfq"),
                     br(),
-                    h5("Sample with spike-in intenstiy more than mean + 2SD"),
+                    h5("Sample with spike-in intensity more than mean + 2SD"),
                     tableOutput("spikehigh_lfq")
                   )
                   
@@ -247,6 +331,25 @@ ui <- dashboardPage(
       # two tabs, two tabs in each tab, 
       tabItem(
         tabName = "contaminants",
+        br(),
+        h5("The proteinGroups are divided into different contaminant categories by their origins (Bovine) and the uniqueness while mapping to protein IDs in this analysis: "),
+        HTML(
+          paste(
+            h5(HTML('&emsp;'), span("- Non-Contaminant", style = "color:orange")),
+            h5(HTML('&emsp;'), span("- Contaminant.Bovine.Unique", style = "color:orange")),
+            h5(HTML('&emsp;'), span("- Contaminant.Bovine.NonUnique", style = "color:orange")),
+            h5(HTML('&emsp;'), span("- Contaminant.NonBovine.Unique", style = "color:orange")),
+            h5(HTML('&emsp;'), span("- Contaminant.NonBovine.NonUnique", style = "color:orange")),
+            h5(HTML('&emsp;'), span("- Trypsin", style = "color:orange")),
+            h5(HTML('&emsp;'), span("- LGB(Bovine)", style = "color:orange"))
+          )
+        ),
+        br(),
+        h5("The 'Unique' mapping is determined when the proteinGroup only contains the protein.id(s) that mapped to the defined contaminant(s)."),
+        h5("The 'Unique' contaminants will be removed from the data for the most of QC analyses and the clean dataset can be downloaded in the 'Download Datasets' page."),
+        h5("Among the contaminants, we also particularly examine the levels of 'Trpsin' and 'Bovine LGB (Beta-Lactoglobulin)' in the Contaminant analysis."),
+        br(),
+        br(),
         tabsetPanel(
           tabPanel(
             "Overall by Individual Sample",
@@ -418,7 +521,7 @@ ui <- dashboardPage(
                   plotlyOutput('pg_int_lfq')
                 ),
                 tabPanel(
-                  "Peptide Count",
+                  "Peptide Intensity",
                   h4(strong("peptides.txt is required for this analysis.")),
                   plotlyOutput('pt_int')
                 )
@@ -444,10 +547,10 @@ ui <- dashboardPage(
               )
             ),
             fluidRow(
+              h4(strong("DOE is required for this analysis.")),
               tabBox(
                 title = "Violin Plot by Run order",
                 width = 12,
-                h4(strong("DOE is required for this analysis.")),
                 tabPanel(
                   "Raw Intensity",
                   br(),
@@ -598,8 +701,8 @@ ui <- dashboardPage(
       # three tabs, two tabs in each tab
       tabItem(
         tabName = "top20",
+        h4("Full tables can be downloaded in the 'Download Datasets' page."),
         tabsetPanel(
-          h4("Full tables can be downloaded in the 'Download Datasets' page. "),
           tabPanel(
             "Overall",
             fluidRow(
@@ -629,12 +732,19 @@ ui <- dashboardPage(
                 tabPanel(
                   "Raw Intensity",
                   br(),
-                  tableOutput('top20_t_raw')
+                  uiOutput("sampletype_raw"),
+                  br(),
+                  br(),
+                  tableOutput('top20_st_raw')
                 ),
                 tabPanel(
                   "LFQ Intensity",
                   h4(strong("LFQ run in MaxQuant is required for this analysis.")),
-                  tableOutput('top20_t_lfq')
+                  br(),
+                  uiOutput("sampletype_lfq"),
+                  br(),
+                  br(),
+                  tableOutput('top20_st_lfq')
                 )
               )
             )
@@ -649,12 +759,19 @@ ui <- dashboardPage(
                 tabPanel(
                   "Raw Intensity",
                   br(),
-                  tableOutput('top20_st_raw')
+                  uiOutput("type_raw"),
+                  br(),
+                  br(),
+                  tableOutput('top20_t_raw')
                 ),
                 tabPanel(
                   "LFQ Intensity",
                   h4(strong("LFQ run in MaxQuant is required for this analysis.")),
-                  tableOutput('top20_st_lfq')
+                  br(),
+                  uiOutput("type_lfq"),
+                  br(),
+                  br(),
+                  tableOutput('top20_t_lfq')
                 )
               )
             )
@@ -760,7 +877,9 @@ ui <- dashboardPage(
         p("Here we perform the test on both raw and LFQ data and 1000 permutation test are applied to assess the statistical significance of the test statistic. 
           'quantroPvalPerm' is the p-value associated with the proportion of times the test statistics resulting from the permuted samples were larger than quantroStat"),
         a("Reference: Hicks SC,Irizarry RA, quantro: a data-driven approach to guide the choice of an appropriate, Genome Biol. 2015 Jun 4;16:117.", href="https://www.ncbi.nlm.nih.gov/pubmed/?term=quantro%2C+bioinformatics"),
-        
+        br(),
+        h4(strong(span(textOutput('qt_notallow'), style="color:red"))),
+        h4(strong(span(textOutput('nc_qt_notallow'), style="color:red"))),
         tabsetPanel(
           tabPanel(
             "Raw Intensity",
@@ -827,7 +946,74 @@ ui <- dashboardPage(
                 plotlyOutput('qt_den_lfq_split')
               )
             )
+          ),
+          tabPanel(
+            "No 'Control'- Raw Intensity",
+            br(),
+            fluidRow(
+              box(
+                title = "ANOVA Test",
+                status = "info",
+                tableOutput('nc_qt_anov_raw')
+              ),
+              box(
+                title = "Quantro Test",
+                status = "info",
+                tableOutput('nc_qt_qt_raw')
+              )
+            ),
+            fluidRow(
+              box(
+                title = "Intensity Plot",
+                status = "info",
+                width = 12,
+                plotlyOutput('nc_qt_box_raw')
+              )
+            ),
+            fluidRow(
+              box(
+                title = "Density Plot",
+                status = "info",
+                width = 12,
+                plotlyOutput('nc_qt_den_raw'),
+                plotlyOutput('nc_qt_den_raw_split')
+              )
+            )
+          ),
+          tabPanel(
+            "No 'Control'- LFQ Intensity",
+            h4(strong("LFQ run in MaxQuant is required for this analysis.")),
+            fluidRow(
+              box(
+                title = "ANOVA Test",
+                status = "info",
+                tableOutput('nc_qt_anov_lfq')
+              ),
+              box(
+                title = "Quantro Test",
+                status = "info",
+                tableOutput('nc_qt_qt_lfq')
+              )
+            ),
+            fluidRow(
+              box(
+                title = "Intensity Plot",
+                status = "info",
+                width = 12,
+                plotlyOutput('nc_qt_box_lfq')
+              )
+            ),
+            fluidRow(
+              box(
+                title = "Density Plot",
+                status = "info",
+                width = 12,
+                plotlyOutput('nc_qt_den_lfq'),
+                plotlyOutput('nc_qt_den_lfq_split')
+              )
+            )
           )
+          
         )
       ),
       # one page
@@ -835,7 +1021,34 @@ ui <- dashboardPage(
         tabName = "downloaddataset",
         fluidRow(
           box(
+            title = "Descriptions of Datasets",
+            width = 12,
+            status = "primary",
+            solidHeader = TRUE,
+            HTML(
+              paste(
+                h5(strong(span("Log2_Raw/LFQ_data", style = "color:purple"))),
+                p(HTML('&emsp;'), ("The log2 value of raw/lfq intensities of proteinGroups for each sample. The 'Reverse' and 'Only.identified.by.sites' results are filtered in this dataset.")),
+                h5(strong(span("Log2_Raw/LFQ_cleaned_data", style = "color:purple"))),
+                p(HTML('&emsp;'), ("The log2 value of raw/lfq intensities of proteinGroups for each sample. Besides the 'Reverse' and 'Only.identified.by.sites', the proteinGroups that uniquely mapped to the defined 'Potential Contaminant/Contaminant' are removed in this dataset.")),
+                h5(strong(span("Log2_Raw/LFQ_Contaminant_table", style = "color:purple"))),
+                p(HTML('&emsp;'), ("The log2 value of raw/lfq intensities of proteinGroups that are defined as 'Potential Contaminant/Contaminant' for each sample.")),
+                h5(strong(span("Mean_Log2_Raw/LFQ_data", style = "color:purple"))),
+                p(HTML('&emsp;'), ("The log2 mean value of raw/lfq intensities for each proteinGroups across all the samples.")),
+                
+                h5(strong(span("Mean_Log2_Raw/LFQ_bySampleType_data", style = "color:purple"))),
+                p(HTML('&emsp;'), span("Only available when the DOE is provided.", style = "color:blue"), ("The log2 mean value of raw/lfq intensities for each proteinGroups across the samples within the same sample type groups.")),
+                h5(strong(span("Mean_Log2_Raw/LFQ_byType_data", style = "color:purple"))),
+                p(HTML('&emsp;'), span("Only available when the DOE is provided.", style = "color:blue"), ("The log2 mean value of raw/lfq intensities for each proteinGroups across the samples within the 'control' and 'sample' groups."))
+              )
+            )
+          )
+        ),
+        fluidRow(
+          box(
             title = "Raw Data",
+            status = "primary",
+            solidHeader = TRUE,
             h4(),
             downloadButton("dtable_log2_raw", "Log2_Raw_data"),
             br(),
@@ -856,6 +1069,8 @@ ui <- dashboardPage(
           ),
           box(
             title = "LFQ Data",
+            status = "primary",
+            solidHeader = TRUE,
             h4(strong("LFQ run in MaxQuant is required for this analysis.")),
             downloadButton("dtable_log2_lfq", "Log2_LFQ_data"),
             br(),

@@ -1,0 +1,1786 @@
+---
+title: "Quality Control Report for MaxQuant Proteomic Data"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  html_document:
+    highlight: kate
+    number_sections: no
+    theme: lumen
+    toc: yes
+    toc_float: yes
+params:
+  pgfile: NA
+  ptfile: NA
+  msfile: NA
+  smfile: NA
+  doefile: NA
+  doe_sep: NA
+
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+# loading libraries
+
+
+
+options(stringsAsFactors = FALSE)
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, error=FALSE, message=FALSE, fig.width=10)
+#source("functions.R")
+```
+
+```{r pg data}
+
+pg <- read.table(params$pgfile,  header = T, sep = "\t",
+                stringsAsFactors = F, quote = "\"", comment.char = "")
+
+parsed_pg <- process_pg(pg)
+
+# check spikein
+
+if(length(pg$Protein.IDs[pg$Protein.IDs %in% "P00000"])==0){
+  spikeinRun <- "N"
+  out_spike_descrp <- "No spike-in is added in this experiment."
+}else{
+  spikeinRun <- "Y"
+  out_spike_descrp <- ""
+}
+
+# check LFQ
+
+pg_lfq_col <- parsed_pg %>% 
+      select(starts_with("LFQ"))
+
+if(length(colnames(pg_lfq_col))>0){
+  LFQRun <- "Y"
+}else{
+  LFQRun <- "N"
+}
+
+################################################################################################
+# datasets
+
+## raw
+table_log2_raw <- getLog2Table(parsed_pg, "raw")
+table_log2_clean_raw <- getLog2CleanTable(parsed_pg, "raw")
+table_contam_log2_raw <- getLog2ContamTable(parsed_pg, "raw")
+
+## lfq
+if(LFQRun=="Y"){
+  table_log2_lfq <- getLog2Table(parsed_pg, "lfq")
+  table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
+  table_contam_log2_lfq <- getLog2ContamTable(parsed_pg, "lfq")
+}
+
+################################################################################################
+# expCheck - spikein
+
+if(length(parsed_pg$Protein.IDs[parsed_pg$Protein.IDs %in% "P00000"])!=0){
+  spike_dat_raw <- getSpikeInfo(parsed_pg, "raw")
+  spike_raw_log2_mean <- mean(spike_dat_raw$log2.intensity)
+  spike_raw_log2_sd <- sd(spike_dat_raw$log2.intensity)
+  cutline_below_raw = spike_raw_log2_mean - 2*spike_raw_log2_sd
+  cutline_above_raw = spike_raw_log2_mean + 2*spike_raw_log2_sd
+  below_raw <- getSpikeBelow2sdSample(spike_dat_raw)
+  above_raw <- getSpikeAbove2sdSample(spike_dat_raw)
+  spike_dat_raw <- spike_dat_raw %>% 
+    mutate(outlier = ifelse(sample %in% below_raw$sample | sample %in% above_raw$sample, "#FF6666", "#00CCCC"))
+
+  if(LFQRun=="Y"){
+    spike_dat_lfq <- getSpikeInfo(parsed_pg, "lfq")
+    spike_lfq_log2_mean <- mean(spike_dat_lfq$log2.intensity)
+    spike_lfq_log2_sd <- sd(spike_dat_lfq$log2.intensity)
+    cutline_below_lfq = spike_lfq_log2_mean - 2*spike_lfq_log2_sd
+    cutline_above_lfq = spike_lfq_log2_mean + 2*spike_lfq_log2_sd
+    below_lfq <- getSpikeBelow2sdSample(spike_dat_lfq)
+    above_lfq <- getSpikeAbove2sdSample(spike_dat_lfq)
+    spike_dat_lfq <- spike_dat_lfq %>% 
+      mutate(outlier = ifelse(sample %in% below_lfq$sample | sample %in% above_lfq$sample, "#FF6666", "#00CCCC"))
+  } 
+}
+
+################################################################################################
+# expCheck - spikein custom
+
+#if(isTruthy(params$c_spike)){
+#  c_spike = params$c_spike
+  
+  # check if the custom spike is there
+#  if(c_spike %in% parsed_pg$Protein.IDs){
+    ## raw  
+#    c_spike_dat_raw <- getCustomSpikeInfo(parsed_pg, "raw", c_spike)
+#    c_spike_raw_log2_mean <- mean(c_spike_dat_raw$log2.intensity, na.rm=TRUE)
+#    c_spike_raw_log2_sd <- sd(c_spike_dat_raw$log2.intensity, na.rm=TRUE)
+#    c_cutline_below_raw = c_spike_raw_log2_mean - 2*c_spike_raw_log2_sd
+#    c_cutline_above_raw = c_spike_raw_log2_mean + 2*c_spike_raw_log2_sd
+#    c_below_raw <- getSpikeBelow2sdSample(c_spike_dat_raw)
+#    c_above_raw <- getSpikeAbove2sdSample(c_spike_dat_raw)
+#    c_spike_dat_raw <- c_spike_dat_raw %>% 
+#    mutate(outlier = ifelse(sample %in% c_below_raw$sample | sample %in% c_above_raw$sample, "#FF6666", "#00CCCC"))
+    
+    ## lfq
+#    if(LFQRun=="Y"){
+#     c_spike_dat_lfq <- getCustomSpikeInfo(parsed_pg, "lfq", c_spike)
+#      c_spike_lfq_log2_mean <- mean(c_spike_dat_lfq$log2.intensity, na.rm=TRUE)
+#      c_spike_lfq_log2_sd <- sd(c_spike_dat_lfq$log2.intensity, na.rm=TRUE)
+#      c_cutline_below_lfq = c_spike_lfq_log2_mean - 2*c_spike_lfq_log2_sd
+#      c_cutline_above_lfq = c_spike_lfq_log2_mean + 2*c_spike_lfq_log2_sd
+#      c_below_lfq <- getSpikeBelow2sdSample(c_spike_dat_lfq)
+#      c_above_lfq <- getSpikeAbove2sdSample(c_spike_dat_lfq)
+#      c_spike_dat_lfq <- c_spike_dat_lfq %>% 
+#      mutate(outlier = ifelse(sample %in% c_below_lfq$sample | sample %in% c_above_lfq$sample, "#FF6666", "#00CCCC"))
+          
+#    }
+#  }
+#}
+
+################################################################################################
+# contaminants
+## raw
+raw_con_info <- getContamInfo(parsed_pg, "raw")
+raw_con_t1 <- getContamTable1(raw_con_info)
+    
+raw_con_t1g <- gather(raw_con_t1, key = "Contaminant.type", value = "Total.intensity", -sample)
+
+## lfq
+if(LFQRun=="Y"){
+  lfq_con_info <- getContamInfo(parsed_pg, "lfq")
+  lfq_con_t1 <- getContamTable1(lfq_con_info)
+      
+  lfq_con_t1g <- gather(lfq_con_t1, key = "Contaminant.type", value = "Total.intensity", -sample)
+      
+}
+  
+################################################################################################
+# protein counts
+## raw
+raw_prog_count <- getProteinCount(parsed_pg, "raw")
+
+## lfq
+if(LFQRun=="Y"){
+  lfq_prog_count <- getProteinCount(parsed_pg, "lfq")
+}
+
+################################################################################################
+# protein intensity
+    
+# total by individual
+## raw
+table_log2_clean_raw <- getLog2CleanTable(parsed_pg, "raw")
+prog_int_sum_raw <- getTotalIntensity(table_log2_clean_raw)
+
+## lfq
+if(LFQRun=="Y"){
+  table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
+  prog_int_sum_lfq <- getTotalIntensity(table_log2_clean_lfq)
+}
+
+################################################################################################
+# protein intensity
+
+# violin distribution
+## raw
+pg_ints_raw <- getIntensity(table_log2_clean_raw)
+pg_ints_raw_melt <- melt(pg_ints_raw, id.vars="sample")
+pg_ints_raw_melt$value = as.numeric(pg_ints_raw_melt$value)
+
+## lfq
+if(LFQRun=="Y"){
+  pg_ints_lfq <- getIntensity(table_log2_clean_lfq)
+  pg_ints_lfq_melt <- melt(pg_ints_lfq, id.vars="sample")
+  pg_ints_lfq_melt$value = as.numeric(pg_ints_lfq_melt$value)
+      
+}
+
+################################################################################################
+# protein intensity
+
+# Raw vs LFQ overll
+# get the melt data from raw and lfq: pg_ints_raw/lfq_melt
+    
+if(LFQRun=="Y"){
+  melt_table <- data.frame(raw=pg_ints_raw_melt$value,
+                           lfq=pg_ints_lfq_melt$value)
+}
+
+################################################################################################
+# CV
+## raw
+cv_raw <- ddply(pg_ints_raw_melt, .(variable), summarise, cv=sd(value)/mean(value)*100)
+
+## lfq
+if(LFQRun=="Y"){
+  cv_lfq <- ddply(pg_ints_lfq_melt, .(variable), summarise, cv=sd(value)/mean(value)*100)
+}
+
+################################################################################################
+# top20
+# get the mean intensity of all the proteins from table_log2_clean_raw/lfq
+    
+## raw
+melt_table_name_raw <- getMeltwithNames(table_log2_clean_raw)
+annotated_mean_table_raw <- countMeanbyProtein(melt_table_name_raw)
+top20.raw <- annotated_mean_table_raw[1:20,]
+
+## lfq
+if(LFQRun=="Y"){
+  melt_table_name_lfq <- getMeltwithNames(table_log2_clean_lfq)
+  annotated_mean_table_lfq <- countMeanbyProtein(melt_table_name_lfq)
+  top20.lfq <- annotated_mean_table_lfq[1:20,]
+}
+
+################################################################################################
+# pca
+## raw
+pca_table_raw <- getPCAtable(table_log2_clean_raw)
+pc12_raw <- getPC12Percentage(table_log2_clean_raw)
+
+## lfq
+if(LFQRun=="Y"){
+  pca_table_lfq <- getPCAtable(table_log2_clean_lfq)
+  pc12_lfq <- getPC12Percentage(table_log2_clean_lfq)
+}
+
+
+```
+
+```{r pt data}
+if(isTruthy(params$ptfile)){
+  
+  pt <- read.table(params$ptfile, header = T, sep = "\t", stringsAsFactors = F, quote = "\"", comment.char = "")
+  
+  # get the average of Cysteine
+  cys_avg = sum(pt$C.Count)/nrow(pt)
+  # get the average of missed cleavage
+  ms_clvg_avg = sum(pt$Missed.cleavage)/nrow(pt)
+  # make checkpoint table
+  avg_table = data.frame("Feature" = c("Cysteine","Missed Cleavage"),
+                         "Percentage" = c(paste0(format(round(cys_avg*100, 2), nsmall = 2), " %"),
+                                          paste0(format(round(ms_clvg_avg*100, 2), nsmall = 2), " %"))) 
+  # get peptide count by individual sample
+  pep_count <- getPepCount(pt)
+  
+  # get peptide total log2 intensity
+  pep_int_sum <- getTotalIntensityPep(pt)
+  
+}
+
+
+```
+
+```{r ms + sm data}
+
+if(isTruthy(params$smfile)){
+  if(isTruthy(params$msfile)){
+    ms_file <- params$msfile
+    
+    ms <- read.table(ms_file, header = T, sep = "\t",
+                     stringsAsFactors = F, quote = "\"",
+                     comment.char = "")
+    sum_file <- params$smfile
+    
+    sumtxt <- read.table(sum_file, header = T, sep = "\t",
+                         stringsAsFactors = F, quote = "\"",
+                         comment.char = "")
+    ms_clvg_table <- ms %>% 
+      select(Raw.file, Missed.cleavages) %>% 
+      left_join(sumtxt %>% select(Raw.file, Experiment)) %>% 
+      dplyr::count(Experiment, Missed.cleavages) %>% 
+      spread(Missed.cleavages, n) %>% 
+      mutate(sum = `0`+`1`+`2`) %>% 
+      mutate(`percentage.0` = `0`/sum*100,
+             `percentage.1` = `1`/sum*100,
+             `percentage.2` = `2`/sum*100)
+    
+  }
+}
+
+
+```
+
+```{r doe data}
+
+if(isTruthy(params$doefile)){
+  doe_file <- params$doefile
+  doe_sep <- params$doe_sep
+  doe <- read.table(doe_file, sep = doe_sep, header = T)
+  
+  colnames(doe) <- gsub(" ", ".", colnames(doe))
+  colnames(doe) <- tolower(colnames(doe))
+  doe$type <- tolower(doe$type)
+    
+  doe$sample.id <- gsub(" ", ".", doe$sample.id)
+  doe$sample.id <- gsub("-", ".", doe$sample.id)
+  
+  ################################################################################################
+  # read pg as well (skipped)
+  # check LFQ       (skipped)
+  ################################################################################################
+  # data structure
+  int_col <- pg %>% 
+    select(starts_with("Intensity."))
+  pg_sample_count <- ncol(int_col)
+  
+  sampletype_table <- dplyr::count(doe, sample.type)
+  ################################################################################################
+  # contaminant type with sample type #pg
+  ## raw
+  raw_con_info <- getContamInfo(parsed_pg, "raw")
+  raw_con_t2 <- getContamTable2(raw_con_info, doe)
+  
+  ## lfq
+  if(LFQRun=="Y"){
+    lfq_con_info <- getContamInfo(parsed_pg, "lfq")
+    lfq_con_t2 <- getContamTable2(lfq_con_info, doe)
+      
+  }
+  
+  ################################################################################################
+  # protein counts 
+  # sample type
+  ## raw
+  raw_prog_count_doe <- getProteinCountDoe(parsed_pg, "raw", doe)
+  
+  ## lfq
+  if(LFQRun=="Y"){
+    lfq_prog_count_doe <- getProteinCountDoe(parsed_pg, "lfq", doe)
+  }
+  
+  ################################################################################################
+  # type cdf plot
+  ## raw
+  per_data_melt_raw <- getExpressedSamplePercentPerProteinEachType(parsed_pg, "raw", doe)
+  
+  ## lfq
+  if(LFQRun=="Y"){
+    per_data_melt_lfq <- getExpressedSamplePercentPerProteinEachType(parsed_pg, "lfq", doe)
+  }
+  
+  ################################################################################################
+  # peptide counts
+  # get peptide count by sample.type and type
+  if(isTruthy(params$ptfile)){
+    pep_count_doe <- getPepCountDoe(pt, doe)
+  }
+  
+  ################################################################################################
+  # protein intensity - mean proportion plot
+  ## raw
+  table_log2_clean_raw <- getLog2CleanTable(parsed_pg, "raw")
+  pg_ints_raw <- getIntensity(table_log2_clean_raw)
+  pg_ints_raw_melt <- melt(pg_ints_raw, id.vars="sample")
+  pg_ints_raw_melt$value = as.numeric(pg_ints_raw_melt$value)
+    
+  mp_raw <- getMedianIntPlotData(pg_ints_raw_melt, doe)
+  
+  ## lfq
+  if(LFQRun=="Y"){
+    table_log2_clean_lfq <- getLog2CleanTable(parsed_pg, "lfq")
+    pg_ints_lfq <- getIntensity(table_log2_clean_lfq)
+    pg_ints_lfq_melt <- melt(pg_ints_lfq, id.vars="sample")
+    pg_ints_lfq_melt$value = as.numeric(pg_ints_lfq_melt$value)
+      
+    mp_lfq <- getMedianIntPlotData(pg_ints_lfq_melt, doe)
+  }
+  
+  ################################################################################################
+  # protein intensity - cdf plot and violin plot
+  ## raw
+  pg_ints_raw_melt_doe = pg_ints_raw_melt %>% 
+    left_join(doe, by=c("sample"="sample.id"))
+  
+  ## lfq
+  if(LFQRun=="Y"){
+    pg_ints_lfq_melt_doe = pg_ints_lfq_melt %>% 
+        left_join(doe, by=c("sample"="sample.id"))
+      
+  }
+  
+  ################################################################################################
+  # protein intensity - Raw vs LFQ sample.type
+  # get the melt data from raw and lfq: pg_ints_raw/lfq_melt_doe
+  if(LFQRun=="Y"){
+    melt_table_doe <- data.frame(sample=pg_ints_raw_melt_doe$sample,
+                                 type=pg_ints_raw_melt_doe$type,
+                                 sample.type=pg_ints_raw_melt_doe$sample.type,
+                                 raw=pg_ints_raw_melt_doe$value,
+                                 lfq=pg_ints_lfq_melt_doe$value)
+      
+    st_num <- length(unique(melt_table_doe$sample.type))
+    if(st_num<=3){
+      n=2
+    }else{
+      n=3
+      }
+    n <- as.numeric(n)
+  }
+  
+  ################################################################################################
+  # CV with doe, sample type
+  ## raw
+  cv_raw_st <- ddply(pg_ints_raw_melt_doe, .(variable, sample.type), summarise, cv=sd(value)/mean(value)*100)
+  
+  ## lfq
+  if(LFQRun=="Y"){
+    cv_lfq_st <- ddply(pg_ints_lfq_melt_doe, .(variable, sample.type), summarise, cv=sd(value)/mean(value)*100)
+  }
+  # CV with doe, type
+  ## raw
+  cv_raw_t <- ddply(pg_ints_raw_melt_doe, .(variable, type), summarise, cv=sd(value)/mean(value)*100)
+  
+  ## lfq
+  if(LFQRun=="Y"){
+    cv_lfq_t <- ddply(pg_ints_lfq_melt_doe, .(variable, type), summarise, cv=sd(value)/mean(value)*100)
+  }  
+  
+  ################################################################################################
+  # top20 sample.type
+  ## raw
+  melt_table_name_raw <- getMeltwithNames(table_log2_clean_raw)
+  melt_table_name_raw_doe <- melt_table_name_raw %>% 
+    left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
+    
+  wide_sampletype_table_raw <- countMeanbyProteinSampletypeDoe(melt_table_name_raw_doe)
+  name_col_st_raw <- wide_sampletype_table_raw[,c(1:3)]
+  measure_col_st_raw <- wide_sampletype_table_raw[,c(4:ncol(wide_sampletype_table_raw))]
+  
+  long_st_raw <- ""
+  for(i in colnames(measure_col_st_raw)){
+    table <- cbind(name_col_st_raw, measure_col_st_raw[,i]) 
+    colnames(table)[4] <- "Log2.Intensity"
+    table$Log2.Intensity <- format(round(table$Log2.Intensity,2))
+    table <- table %>% arrange(desc(Log2.Intensity))
+    top20 <- table[c(1:20),]
+    long_st_raw <- rbind(long_st_raw, 
+                         c("","","",""),
+                         c("","","",""),
+                         c("","","",""),
+                         c("","","",""),
+                         c("","","",""),
+                         c(i,"","",""),
+                         top20)
+  }
+  
+  ## lfq
+  if(LFQRun=="Y"){
+    melt_table_name_lfq <- getMeltwithNames(table_log2_clean_lfq)
+    melt_table_name_lfq_doe <- melt_table_name_lfq %>% 
+      left_join(doe %>% select(sample.id, sample.type, type), by=c("sample"="sample.id"))
+      
+    wide_sampletype_table_lfq <- countMeanbyProteinSampletypeDoe(melt_table_name_lfq_doe)
+    name_col_st_lfq <- wide_sampletype_table_lfq[,c(1:3)]
+    measure_col_st_lfq <- wide_sampletype_table_lfq[,c(4:ncol(wide_sampletype_table_lfq))]
+    
+    long_st_lfq <- ""
+    for(i in colnames(measure_col_st_lfq)){
+      table <- cbind(name_col_st_lfq, measure_col_st_lfq[,i]) 
+      colnames(table)[4] <- "Log2.LFQ.Intensity"
+      table$Log2.LFQ.Intensity <- format(round(table$Log2.LFQ.Intensity,2))
+      table <- table %>% arrange(desc(Log2.LFQ.Intensity))
+      top20 <- table[c(1:20),]
+      long_st_lfq <- rbind(long_st_lfq, 
+                           c("","","",""),
+                           c("","","",""),
+                           c("","","",""),
+                           c("","","",""),
+                           c("","","",""),
+                           c(i,"","",""), 
+                           top20)
+    }
+    
+  }
+
+  # top20 type
+  ## raw
+  
+  wide_type_table_raw <- countMeanbyProteinTypeDoe(melt_table_name_raw_doe)
+  name_col_t_raw <- wide_type_table_raw[,c(1:3)]
+  measure_col_t_raw <- wide_type_table_raw[,c(4:ncol(wide_type_table_raw))]
+  
+  long_t_raw <- ""
+  for(i in colnames(measure_col_t_raw)){
+    table <- cbind(name_col_t_raw, measure_col_t_raw[,i]) 
+    colnames(table)[4] <- "Log2.Intensity"
+    table$Log2.Intensity <- format(round(table$Log2.Intensity,2))
+    table <- table %>% arrange(desc(Log2.Intensity))
+    top20 <- table[c(1:20),]
+    long_t_raw <- rbind(long_t_raw, 
+                         c("","","",""),
+                         c("","","",""),
+                         c("","","",""),
+                         c("","","",""),
+                         c("","","",""),
+                         c(i,"","",""),
+                         top20)
+  }
+  
+  ## lfq
+  if(LFQRun=="Y"){
+      
+    wide_type_table_lfq <- countMeanbyProteinTypeDoe(melt_table_name_lfq_doe)
+    name_col_t_lfq <- wide_type_table_lfq[,c(1:3)]
+    measure_col_t_lfq <- wide_type_table_lfq[,c(4:ncol(wide_type_table_lfq))]
+    
+    long_t_lfq <- ""
+    for(i in colnames(measure_col_t_lfq)){
+      table <- cbind(name_col_t_lfq, measure_col_t_lfq[,i]) 
+      colnames(table)[4] <- "Log2.LFQ.Intensity"
+      table$Log2.LFQ.Intensity <- format(round(table$Log2.LFQ.Intensity,2))
+      table <- table %>% arrange(desc(Log2.LFQ.Intensity))
+      top20 <- table[c(1:20),]
+      long_t_lfq <- rbind(long_t_lfq, 
+                          c("","","",""),
+                          c("","","",""),
+                          c("","","",""),
+                          c("","","",""),
+                          c("","","",""),
+                          c(i,"","",""),
+                          top20)
+    }
+    
+  }
+  
+  ################################################################################################
+  # pca sample    sample.type, run.order
+  ## raw
+  pca_table_raw_doe <- getPCAtableDOE(table_log2_clean_raw, doe)
+  pc12_raw <- getPC12Percentage(table_log2_clean_raw)
+
+  
+  ## lfq
+  if(LFQRun=="Y"){
+    pca_table_lfq_doe <- getPCAtableDOE(table_log2_clean_lfq, doe)
+    pc12_lfq <- getPC12Percentage(table_log2_clean_lfq)
+  }
+  
+  ################################################################################################
+  # contribution of the variance
+  ## raw 
+  pvca_raw <- getPVCAresult(table_log2_clean_raw, doe)
+  
+  ## lfq
+  if(LFQRun=="Y"){
+    pvca_lfq <- getPVCAresult(table_log2_clean_lfq, doe)
+  }
+   
+  ################################################################################################
+  # quantro
+  # check the number of sample.type is >= 2
+  if(length(unique(doe$sample.type))<2){
+    qt_notallow <- "The number of 'sample.type' is less than 2, Quantro can not be applied!"
+  }else{
+    qt_notallow <- ""
+    
+    ## raw
+    qt_raw <- doQuantro(table_log2_clean_raw, doe)
+    qt_raw_a <- doQuantroAnova(table_log2_clean_raw, doe)
+    
+    ## lfq
+    if(LFQRun=="Y"){
+      qt_lfq <- doQuantro(table_log2_clean_lfq, doe)
+      qt_lfq_a <- doQuantroAnova(table_log2_clean_lfq, doe)
+    }
+    
+    # use pg_ints_raw_melt_doe or pg_ints_lfq_melt_doe
+    # boxplot
+    ## raw
+    pg_ints_raw_melt_doe$value = as.numeric(pg_ints_raw_melt_doe$value)
+    
+    ## lfq
+    if(LFQRun=="Y"){
+      pg_ints_lfq_melt_doe$value = as.numeric(pg_ints_lfq_melt_doe$value)
+    }
+  }
+  
+  # quantro --- No control
+  nc_doe <- doe %>% filter(type=="sample")
+  if(length(unique(nc_doe$sample.type))<2){
+    nc_qt_notallow <- "The number of 'sample.type' is less than 2, Quantro can not be applied!"
+  }else{
+    nc_qt_notallow <- ""
+    
+    ## raw
+    nc_qt_raw <- doQuantroNoControl(table_log2_clean_raw, doe)
+    nc_qt_raw_a <- doQuantroNoControlAnova(table_log2_clean_raw, doe)
+    
+    ## lfq
+    if(LFQRun=="Y"){
+      nc_qt_lfq <- doQuantroNoControl(table_log2_clean_lfq, doe)
+      nc_qt_lfq_a <- doQuantroNoControlAnova(table_log2_clean_lfq, doe)
+    }
+    
+    # use pg_ints_raw_melt_doe or pg_ints_lfq_melt_doe
+    # boxplot
+    ## raw
+    pg_ints_raw_melt_doe$value = as.numeric(pg_ints_raw_melt_doe$value)
+    
+    ## lfq
+    if(LFQRun=="Y"){
+      pg_ints_lfq_melt_doe$value = as.numeric(pg_ints_lfq_melt_doe$value)
+    }
+    
+  }
+  
+}
+```
+
+<br /><br /><br />
+
+# Data Structure
+
+DOE is required for this analysis.
+
+<br />
+```{r, fig.width=7, fig.height=5}
+if(isTruthy(params$doefile)){
+  sampletype_table %>% kable() %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+  
+  plot_ly(sampletype_table, x= ~sample.type, y=~n, type = 'bar', color = ~sample.type) %>%
+    layout(yaxis=list(title = 'Count'))
+}
+
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+# Experimental Checkpoints {.tabset .tabset-fade .tabset-pills}
+
+## Digestion Eifficiency {.tabset .tabset-fade .tabset-pills}
+
+### Occurence of Cysteine/Missed Cleavage {.tabset .tabset-fade .tabset-pills}
+
+peptides.txt is required for this analysis.
+
+The occurence of Cysteine should be over 10 %. 
+It could be considered exceeding the standard (~20-25%), if the rate of Missed-cleavage is above 40 %
+
+```{r}
+if(isTruthy(params$ptfile)){
+  avg_table %>% kable() %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+  
+}
+
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Missed cleavages per sample
+
+msms.txt and summary.txt are required for this analysis.
+
+```{r}
+if(isTruthy(params$msfile)){
+  if(isTruthy(params$smfile)){
+    plot_ly(ms_clvg_table, x= ~Experiment, y=~`percentage.0`, type = 'bar', name = "percentage.0") %>%
+      add_trace(y = ~`percentage.1`, name = "percentage.1") %>%
+      add_trace(y = ~`percentage.2`, name = "percentage.2") %>%
+      layout(yaxis=list(title = 'Percentage (%)'), barmode = 'group')
+  }
+}
+
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## Spike-in (P00000 DIGESTIF) {.tabset .tabset-fade .tabset-pills}
+
+Spike-in protein must be included for this analysis
+
+### Intensity of Spike-in {.tabset .tabset-fade .tabset-pills}
+
+#### Raw Intensity
+```{r}
+if(spikeinRun=="Y"){
+  n = nrow(spike_dat_raw)
+  plot_ly(spike_dat_raw, x=~sample, y=~log2.intensity, type = "scatter", color =~ I(outlier), name="Spikein") %>% 
+    add_segments(y=cutline_above_raw, yend=cutline_above_raw, x=spike_dat_raw$sample[1], xend=spike_dat_raw$sample[n], color=I("gray"), name="Mean+2SD") %>% 
+    add_segments(y=spike_raw_log2_mean, yend=spike_raw_log2_mean, x=spike_dat_raw$sample[1], xend=spike_dat_raw$sample[n], color=I("black"), name="Mean") %>% 
+    add_segments(y=cutline_below_raw, yend=cutline_below_raw, x=spike_dat_raw$sample[1], xend=spike_dat_raw$sample[n], color=I("gray"), name="Mean-2SD") 
+}
+
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+#### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(spikeinRun=="Y"){
+  if(LFQRun=="Y"){
+    n = nrow(spike_dat_lfq)
+    plot_ly(spike_dat_lfq, x=~sample, y=~log2.intensity, type = "scatter", color =~ I(outlier), name="Spikein") %>% 
+      add_segments(y=cutline_above_lfq, yend=cutline_above_lfq, x=spike_dat_lfq$sample[1], xend=spike_dat_lfq$sample[n], color=I("gray"), name="Mean+2SD") %>%
+      add_segments(y=spike_lfq_log2_mean, yend=spike_lfq_log2_mean, x=spike_dat_lfq$sample[1], xend=spike_dat_lfq$sample[n], color=I("black"), name="Mean") %>%
+      add_segments(y=cutline_below_lfq, yend=cutline_below_lfq, x=spike_dat_lfq$sample[1], xend=spike_dat_lfq$sample[n], color=I("gray"), name="Mean-2SD") 
+  }
+}
+
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Samples with spike-in intensity falling outside mean plus/minus 2SD range {.tabset .tabset-fade .tabset-pills}
+
+#### Raw Intensity
+```{r}
+if(spikeinRun=="Y"){
+  below_raw %>% kable(caption="Sample with spike-in intensity less than mean - 2SD") %>%
+    kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+}  
+if(LFQRun=="Y"){  
+  above_raw %>% kable(caption="Sample with spike-in intensity more than mean - 2SD") %>%
+    kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+}
+
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+#### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(spikeinRun=="Y"){
+  if(LFQRun=="Y"){
+    below_lfq %>% kable(caption="Sample with spike-in intensity less than mean - 2SD") %>%
+      kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+  }
+}
+if(spikeinRun=="Y"){
+  if(LFQRun=="Y"){
+    above_lfq %>% kable(caption="Sample with spike-in intensity more than mean - 2SD") %>%
+      kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+  }
+}
+
+
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+# Contaminants {.tabset .tabset-fade .tabset-pills}
+
+## Overall by individual Sample {.tabset .tabset-fade .tabset-pills}
+
+### Raw Intensity
+```{r}
+ggplotly(
+  ggplot(raw_con_t1g, aes(x=sample, y=Total.intensity, color=Contaminant.type))+
+    geom_point()+
+    labs(y="Total intensity (1og10 scale)")+
+    theme_minimal()+
+    theme(axis.text.x = element_text(angle=90))+
+    scale_y_log10()
+)
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(LFQRun=="Y"){
+  ggplotly(
+    ggplot(lfq_con_t1g, aes(x=sample, y=Total.intensity, color=Contaminant.type))+
+      geom_point()+
+      labs(y="Total intensity (1og10 scale)")+
+      theme_minimal()+
+      theme(axis.text.x = element_text(angle=90))+
+      scale_y_log10()
+  )
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## By Sample Type {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+### Raw Intensity
+```{r}
+if(isTruthy(params$doefile)){
+  plot_ly(raw_con_t2, y=~log2(intensity), x=~sample.type, color=~kind_contam, type = "box") %>% 
+    layout(yaxis=list(title="Log2 Raw Intensity" ),boxmode = "group")
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    plot_ly(lfq_con_t2, y=~log2(intensity), x=~sample.type, color=~kind_contam, type = "box") %>%
+      layout(yaxis=list(title="Log2 LFQ Intensity" ),boxmode = "group")
+  }
+}
+
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+# Protein/Peptide Counts {.tabset .tabset-fade .tabset-pills}
+
+## Protein Count {.tabset .tabset-fade .tabset-pills}
+
+### By Individual Sample {.tabset .tabset-fade .tabset-pills}
+
+#### Raw Intensity
+```{r}
+plot_ly(raw_prog_count, x=~sample, y=~count, type = "scatter") %>%
+  layout(yaxis=list(title="Number of Protein Group"))
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+#### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(LFQRun=="Y"){
+  plot_ly(lfq_prog_count, x=~sample, y=~count, type = "scatter", color=I("#FF6666")) %>%
+    layout(yaxis=list(title="Number of Protein Group"))
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### By Sample Type {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+#### Raw Intensity
+```{r}
+if(isTruthy(params$doefile)){
+  plot_ly(raw_prog_count_doe, x=~sample.type, y=~count, type = "box") %>%
+    layout(yaxis=list(title="Number of Protein Groups"))
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+#### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    plot_ly(lfq_prog_count_doe, x=~sample.type, y=~count, type = "box", color=I("#FF6666")) %>%
+      layout(yaxis=list(title="Number of Protein Groups"))
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### By Type (Control/Experimental Sample) {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+#### Raw Intensity
+```{r}
+if(isTruthy(params$doefile)){
+  ggplot(per_data_melt_raw, aes(x=Value, color=Type))+
+    stat_ecdf(geom = "step")+
+    scale_x_reverse()+
+    labs(x="Percent of samples expressed per protein (%)", y="Proportion of expressed proteins")+
+    theme_minimal()
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+#### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    ggplot(per_data_melt_lfq, aes(x=Value, color=Type))+
+      stat_ecdf(geom = "step")+
+      scale_x_reverse()+
+      labs(x="Percent of samples expressed per protein (%)", y="Proportion of expressed proteins")+
+      theme_minimal()
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## Peptide Count {.tabset .tabset-fade .tabset-pills}
+
+### By Individual Sample
+```{r}
+if(isTruthy(params$ptfile)){
+  plot_ly(pep_count, x=~sample, y=~count, type = "scatter") %>% 
+  layout(yaxis=list(title="Number of Peptide"))
+}
+
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### By Sample Type
+
+DOE is required for this analysis.
+
+```{r}
+if(isTruthy(params$ptfile)){
+  plot_ly(pep_count_doe, x=~sample.type, y=~count, type = "box") %>% 
+    layout(yaxis=list(title="Number of Peptide"), xaxis=list(title="Sample Type"))
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### By Type (Control/Experimental Sample)
+
+DOE is required for this analysis.
+
+```{r}
+if(isTruthy(params$ptfile)){
+  plot_ly(pep_count_doe, x=~type, y=~count, type = "box", color=~type) %>%
+    layout(yaxis=list(title="Number of Peptide"), xaxis=list(title="Type"))
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+# Protein/Peptide Intensity {.tabset .tabset-fade .tabset-pills}
+
+## Overall by Individual Sample {.tabset .tabset-fade .tabset-pills}
+
+### Raw Intensity
+```{r}
+plot_ly(prog_int_sum_raw, x=~sample, y=~Total.Log2.Intensity, type="scatter")
+    
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(LFQRun=="Y"){
+  plot_ly(prog_int_sum_lfq, x=~sample, y=~Total.Log2.Intensity, type="scatter", color=I("#FF6666"))
+      
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Peptide Intensity
+```{r}
+if(isTruthy(params$ptfile)){
+  plot_ly(pep_int_sum, x=~sample, y=~Total.Log2.Intensity, type="scatter", color = I("#3366CC"))
+    
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## Distribution of protein groups intensities per sample {.tabset .tabset-fade .tabset-pills}
+
+### Violin Plot {.tabset .tabset-fade .tabset-pills}
+
+#### Raw Intensity
+```{r}
+plot_ly(pg_ints_raw_melt, x=~sample, y=~value, type="violin", split =~sample, color = I("#3366CC"), showlegend =FALSE) %>% 
+  layout(yaxis=list(title="Log2 Intensity"), xaxis=list(title="Sample"))
+    
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+#### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(LFQRun=="Y"){
+  plot_ly(pg_ints_lfq_melt, x=~sample, y=~value, type="violin", split =~sample, color = I("#FF6666"), showlegend =FALSE) %>% 
+    layout(yaxis=list(title="Log2 Intensity"), xaxis=list(title="Sample"))
+      
+ }
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### By Run order {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+#### Raw Intensity
+```{r}
+if(isTruthy(params$doefile)){
+  ggplotly(
+    ggplot(pg_ints_raw_melt_doe, aes(x=reorder(sample,run.order), y=value, color=sample.type, fill=sample.type))+
+      geom_violin()+
+      theme_minimal()+
+      labs(x="Sample by Run order", y="Log2 Intensity")+
+      theme(axis.text.x = element_text(angle = 90))
+    )
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+#### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    ggplotly(
+      ggplot(pg_ints_lfq_melt_doe, aes(x=reorder(sample,run.order), y=value, color=sample.type, fill=sample.type))+
+        geom_violin()+
+        theme_minimal()+
+        labs(x="Sample by Run order", y="Log2 Intensity")+
+        theme(axis.text.x = element_text(angle = 90))
+      )
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## Mean Proportion Plot by Type {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+### Raw Intensity
+```{r}
+if(isTruthy(params$doefile)){
+  plot_ly(mp_raw, type = "scatter", mode = "markers") %>% 
+    add_trace(y = ~All, name = 'All sample', marker = list(opacity=0.2, color="#3366CC")) %>%
+    layout(yaxis=list(title="Mean Intensity\nSum of Mean Intensities (log scale)", type='log'),
+           xaxis=list(title="Protein Group"))
+    
+  plot_ly(mp_raw, type = "scatter", mode = "markers") %>% 
+    add_trace(y = ~Control, name = 'Control', marker = list(opacity=0.2)) %>%
+    add_trace(y = ~Sample, name = 'Sample', marker = list(opacity=0.2)) %>%
+    layout(yaxis=list(title="Mean Intensity\nSum of Mean Intensities (log scale)", type='log'), 
+           xaxis=list(title="Protein Group"))
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    
+    plot_ly(mp_lfq, type = "scatter", mode = "markers") %>% 
+      add_trace(y = ~All, name = 'All sample', marker = list(opacity=0.2, color="#3366CC")) %>%
+      layout(yaxis=list(title="Mean Intensity\nSum of Mean Intensities (log scale)", type='log'),
+             xaxis=list(title="Protein Group"))
+  }
+  if(LFQRun=="Y"){
+    
+    plot_ly(mp_lfq, type = "scatter", mode = "markers") %>% 
+        add_trace(y = ~Control, name = 'Control', marker = list(opacity=0.2)) %>%
+        add_trace(y = ~Sample, name = 'Sample', marker = list(opacity=0.2)) %>% 
+        layout(yaxis=list(title="Mean Intensity\nSum of Mean Intensities (log scale)", type='log'), 
+               xaxis=list(title="Protein Group"))
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## Cumulative Intensity Distribution for fraction of sample by Sample Type {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+### Raw Intensity
+```{r, fig.height=12}
+if(isTruthy(params$doefile)){
+  ggplot(pg_ints_raw_melt_doe, aes(x=value+0.000001, color=sample))+
+    stat_ecdf()+
+    labs(x = "Log2 Intensities by Protein", 
+         y = "Fraction of Library") + 
+    theme_minimal() +
+    facet_wrap(~sample.type, ncol = 2)
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r, fig.height=12}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    ggplot(pg_ints_lfq_melt_doe, aes(x=value+0.000001, color=sample))+
+      stat_ecdf()+
+      labs(x = "Log2 Intensities by Protein", 
+           y = "Fraction of Library") + 
+      theme_minimal() +
+      facet_wrap(~sample.type, ncol = 2)
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## Raw vs LFQ {.tabset .tabset-fade .tabset-pills}
+
+### Overall Sample
+```{r, fig.height=5, fig.width=5}
+if(LFQRun=="Y"){
+  plot_ly(melt_table, x=~raw, y=~lfq, type="scatter", marker=list(opacity=0.3)) %>%
+    layout(xaxis=list(title="Raw Intensity"), yaxis=list(title="LFQ Intensity"))
+      
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### By Sample Type
+
+DOE is required for this analysis.
+
+```{r}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    st_num <- length(unique(melt_table_doe$sample.type))
+    if(st_num<=3){
+      n=2
+    }else{
+      n=3
+    }
+    n <- as.numeric(n)
+    #melt_table_doe %>% 
+    #  group_by(sample.type) %>% 
+    #  group_map(~ plot_ly(data = ., x=~raw, y=~lfq, color= ~sample.type, type="scatter", marker=list(opacity=0.3)), keep = TRUE) %>% 
+    #  subplot(nrows = n, shareX = TRUE, shareY = TRUE) %>% 
+    #  layout(xaxis=list(title="Raw Intensity"), yaxis=list(title="LFQ Intensity"))
+     
+    ggplotly(
+      ggplot(melt_table_doe, aes(x=raw, y=lfq, color=sample.type))+
+        geom_point(alpha=0.5)+
+        facet_wrap(vars(sample.type), ncol = n)+
+        theme_minimal()+
+        labs(x="Raw Intensity", y="LFQ Intensity")
+    )
+    
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+# Coefficient of Variation {.tabset .tabset-fade .tabset-pills}
+
+## Overall {.tabset .tabset-fade .tabset-pills}
+
+### Raw Intensity
+```{r}
+ggplotly(
+  ggplot(cv_raw, aes(x=cv))+
+    geom_density(alpha=0.5, fill="#3366CC")+
+    theme_minimal()+
+    labs(x="Coefficient of Variation (%)", y="Density")
+)
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(LFQRun=="Y"){
+  ggplotly(
+    ggplot(cv_lfq, aes(x=cv))+
+      geom_density(alpha=0.5, fill="#FF6666")+
+      theme_minimal()+
+      labs(x="Coefficient of Variation (%)", y="Density")
+  )
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## By Sample Type {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+### Raw Intensity
+```{r, fig.height=4}
+if(isTruthy(params$doefile)){
+  ggplotly(
+    ggplot(cv_raw_st, aes(x=cv, fill=sample.type))+
+      geom_density(alpha=0.5)+
+      theme_minimal()+
+      labs(x="Coefficient of Variation (%)", y="Density")
+    )
+  
+  ggplotly(
+    ggplot(cv_raw_st, aes(x=cv, fill=sample.type))+
+      geom_density(alpha=0.5)+
+      theme_minimal()+
+      labs(x="Coefficient of Variation (%)", y="Density")+
+      facet_grid(~sample.type)
+    )
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r, fig.height=4}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    ggplotly(
+    ggplot(cv_lfq_st, aes(x=cv, fill=sample.type))+
+      geom_density(alpha=0.5)+
+      theme_minimal()+
+      labs(x="Coefficient of Variation (%)", y="Density")
+    )
+  }
+
+  if(LFQRun=="Y"){
+    ggplotly(
+    ggplot(cv_lfq_st, aes(x=cv, fill=sample.type))+
+      geom_density(alpha=0.5)+
+      theme_minimal()+
+      labs(x="Coefficient of Variation (%)", y="Density")+
+      facet_grid(~sample.type)
+    )
+  }
+  
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## By Type (Control/Experimental Sample) {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+### Raw Intensity
+```{r, fig.height=4}
+if(isTruthy(params$doefile)){
+  ggplotly(
+    ggplot(cv_raw_t, aes(x=cv, fill=type))+
+      geom_density(alpha=0.5)+
+      theme_minimal()+
+      labs(x="Coefficient of Variation (%)", y="Density")
+  )
+  
+  ggplotly(
+    ggplot(cv_raw_t, aes(x=cv, fill=type))+
+      geom_density(alpha=0.5)+
+      theme_minimal()+
+      labs(x="Coefficient of Variation (%)", y="Density")+
+      facet_grid(~type)
+  )
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r, fig.height=4}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    ggplotly(
+      ggplot(cv_lfq_t, aes(x=cv, fill=type))+
+        geom_density(alpha=0.5)+
+        theme_minimal()+
+        labs(x="Coefficient of Variation (%)", y="Density")
+    )
+  }
+  if(LFQRun=="Y"){
+    ggplotly(
+      ggplot(cv_lfq_t, aes(x=cv, fill=type))+
+        geom_density(alpha=0.5)+
+        theme_minimal()+
+        labs(x="Coefficient of Variation (%)", y="Density")+
+        facet_grid(~type)
+    )
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+# Top 20 Proteins {.tabset .tabset-fade .tabset-pills}
+
+## Overall {.tabset .tabset-fade .tabset-pills}
+
+### Raw Intensity
+```{r}
+top20.raw %>% 
+  kable() %>%
+  kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(LFQRun=="Y"){
+  top20.lfq %>% 
+    kable() %>%
+    kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## By Sample Type {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+### Raw Intensity
+```{r}
+if(isTruthy(params$doefile)){
+  
+  kable(long_st_raw) %>% 
+    kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    kable(long_st_lfq) %>% 
+      kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## By Type (Control/Experimental Sample) {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+### Raw Intensity
+```{r}
+if(isTruthy(params$doefile)){
+  kable(long_t_raw) %>% 
+    kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    kable(long_t_lfq) %>% 
+      kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+# Principal Component Analysis {.tabset .tabset-fade .tabset-pills}
+
+## By Individual Sample {.tabset .tabset-fade .tabset-pills}
+
+### Raw Intensity
+```{r, fig.width=9, fig.height=7}
+plot_ly(pca_table_raw, x=~PC1, y=~PC2, type = "scatter", color=~sample, text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+  layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+         yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r, fig.width=9, fig.height=7}
+if(LFQRun=="Y"){
+  
+  plot_ly(pca_table_lfq, x=~PC1, y=~PC2, type = "scatter", color=~sample, text=~sample, marker=list(size=16, opacity=0.5)) %>%
+    layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+           yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
+ }
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## By Sample Type {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+### Raw Intensity
+```{r, fig.width=9, fig.height=7}
+if(isTruthy(params$doefile)){
+  plot_ly(pca_table_raw_doe, x=~PC1, y=~PC2, type = "scatter", color=~sample.type, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+    layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+           yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r, fig.width=9, fig.height=7}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    plot_ly(pca_table_lfq_doe, x=~PC1, y=~PC2, type = "scatter", color=~sample.type, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+      layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+             yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
+      
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## By Run Order {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+### Raw Intensity
+```{r, fig.width=9, fig.height=7}
+if(isTruthy(params$doefile)){
+  plot_ly(pca_table_raw_doe, x=~PC1, y=~PC2, type = "scatter", color=~run.order, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+    layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+           yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
+    
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r, fig.width=9, fig.height=7}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    plot_ly(pca_table_lfq_doe, x=~PC1, y=~PC2, type = "scatter", color=~run.order, symbol=~type , text=~sample, marker=list(size=16, opacity=0.5)) %>% 
+      layout(xaxis=list(title=paste0("PC1 (", pc12_raw[1], "%)"), zeroline=FALSE), 
+             yaxis=list(title=paste0("PC1 (", pc12_raw[2], "%)"), zeroline=FALSE))
+      
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+# Contribution of Variance {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+## Raw Intensity
+```{r, fig.width=5}
+if(isTruthy(params$doefile)){
+  plot_ly(pvca_raw, x=~Variable, y=~Proportion.Variance, type="bar", color=~Variable) %>% 
+    layout(yaxis=list(title="Weighted average proportion variance"), xaxis=list(title="Variables"))
+    
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## LFQ Intensity
+
+LFQ run in MaxQUant is required for this analysis
+
+```{r, fig.width=5}
+if(isTruthy(params$doefile)){
+  if(LFQRun=="Y"){
+    plot_ly(pvca_lfq, x=~Variable, y=~Proportion.Variance, type="bar", color=~Variable) %>% 
+      layout(yaxis=list(title="Weighted average proportion variance"), xaxis=list(title="Variables"))
+      
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+# Quantro Global Shift Test {.tabset .tabset-fade .tabset-pills}
+
+DOE is required for this analysis.
+
+```{r}
+# check the number of sample.type is >= 2
+if(isTruthy(params$doefile)){
+  
+  if(length(unique(doe$sample.type))<2){
+    qt_notallow <- "The number of 'sample.type' is less than 2, Quantro can not be applied!"
+    }else{
+      qt_notallow <- ""
+    }
+  
+  # check the number of sample.type without control is >= 2
+  if(length(unique(nc_doe$sample.type))<2){
+    nc_qt_notallow <- "The number of 'sample.type' is less than 2 after remove the contral samples, Quantro can not be applied!"
+  }else{
+    nc_qt_notallow <- ""
+  }
+  
+}
+
+
+
+```
+
+
+## Raw Intensity {.tabset .tabset-fade .tabset-pills}
+
+### ANOVA Test
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(doe$sample.type))>=2){
+    kable(qt_raw_a, digits = 3)
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Quantro Test
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(doe$sample.type))>=2){
+    kable(qt_raw, digits = 3)
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Intensity Plot
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(doe$sample.type))>=2){
+    plot_ly(pg_ints_raw_melt_doe %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+      layout(yaxis=list(title="Log2 Intensity "),
+             xaxis=list(title="Sample", 
+                        categoryorder= "array",
+                        categoryarray=~sample.type))
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Density Plot
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(doe$sample.type))>=2){
+    ggplotly(
+      ggplot(pg_ints_raw_melt_doe, aes(x=value))+
+        stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+        labs(x="Log2 Intensity", y="Density")+
+        theme_minimal()
+    )
+  }
+}
+
+if(isTruthy(params$doefile)){
+  if(length(unique(doe$sample.type))>=2){
+    ggplotly(
+      ggplot(pg_ints_raw_melt_doe, aes(x=value))+
+        stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+        labs(x="Log2 Intensity", y="Density")+
+        theme_minimal()+
+        facet_wrap(~ sample.type)
+    )
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## LFQ Intensity {.tabset .tabset-fade .tabset-pills}
+
+LFQ run in MaxQUant is required for this analysis
+
+### ANOVA Test
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(doe$sample.type))>=2){
+    if(LFQRun=="Y"){
+      kable(qt_lfq_a, digits = 3)
+    }
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Quantro Test
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(doe$sample.type))>=2){
+    if(LFQRun=="Y"){
+      kable(qt_lfq, digits = 3)
+    }
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Intensity Plot
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(doe$sample.type))>=2){
+    if(LFQRun=="Y"){
+      plot_ly(pg_ints_lfq_melt_doe %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+        layout(yaxis=list(title="Log2 Intensity "),
+               xaxis=list(title="Sample", 
+                          categoryorder= "array",
+                          categoryarray=~sample.type))
+    }
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Density Plot
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(doe$sample.type))>=2){
+    if(LFQRun=="Y"){
+      ggplotly(
+        ggplot(pg_ints_lfq_melt_doe, aes(x=value))+
+          stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+          labs(x="Log2 Intensity", y="Density")+
+          theme_minimal()
+      )
+    }
+  }
+}
+
+if(isTruthy(params$doefile)){  
+  if(length(unique(doe$sample.type))>=2){
+    if(LFQRun=="Y"){
+      ggplotly(
+        ggplot(pg_ints_lfq_melt_doe, aes(x=value))+
+          stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+          labs(x="Log2 Intensity", y="Density")+
+          theme_minimal()+
+          facet_wrap(~ sample.type)
+      )
+    }
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## No 'Control' - Raw Intensity {.tabset .tabset-fade .tabset-pills}
+
+### ANOVA Test
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(nc_doe$sample.type))>=2){
+    kable(nc_qt_raw_a, digits = 3)
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Quantro Test
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(nc_doe$sample.type))>=2){
+    kable(nc_qt_raw, digits = 3)
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Intensity Plot
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(nc_doe$sample.type))>=2){
+    plot_ly(pg_ints_raw_melt_doe %>% filter(type=="sample") %>%  arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+      layout(yaxis=list(title="Log2 Intensity "),
+             xaxis=list(title="Sample", 
+                        categoryorder= "array",
+                        categoryarray=~sample.type))
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Density Plot
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(nc_doe$sample.type))>=2){
+     ggplotly(
+       ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+         stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+         labs(x="Log2 Intensity", y="Density")+
+         theme_minimal()
+        )
+  }
+}
+
+if(isTruthy(params$doefile)){
+  if(length(unique(doe$sample.type))>=2){
+    ggplotly(
+      ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+        stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+        labs(x="Log2 Intensity", y="Density")+
+        theme_minimal()+
+        facet_wrap(~ sample.type)
+        )
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+## No 'Control' - LFQ Intensity {.tabset .tabset-fade .tabset-pills}
+
+LFQ run in MaxQUant is required for this analysis
+
+### ANOVA Test
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(nc_doe$sample.type))>=2){
+    kable(nc_qt_lfq_a, digits = 3)
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Quantro Test
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(nc_doe$sample.type))>=2){
+    kable(nc_qt_lfq, digits = 3)
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Intensity Plot
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(nc_doe$sample.type))>=2){
+    plot_ly(pg_ints_lfq_melt_doe %>% filter(type=="sample") %>% arrange(sample.type), x=~sample, y=~value, type="box", color=~sample.type) %>% 
+      layout(yaxis=list(title="Log2 Intensity "),
+             xaxis=list(title="Sample", 
+                        categoryorder= "array",
+                        categoryarray=~sample.type))
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+
+### Density Plot
+```{r}
+if(isTruthy(params$doefile)){
+  if(length(unique(nc_doe$sample.type))>=2){
+    ggplotly(
+      ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+        stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+        labs(x="Log2 Intensity", y="Density")+
+        theme_minimal()
+    )
+  }
+}  
+
+if(isTruthy(params$doefile)){  
+  if(length(unique(doe$sample.type))>=2){
+    ggplotly(
+      ggplot(pg_ints_raw_melt_doe %>% filter(type=="sample"), aes(x=value))+
+        stat_density(aes(group=sample, color=sample.type), position="identity", geom = "line")+
+        labs(x="Log2 Intensity", y="Density")+
+        theme_minimal()+
+        facet_wrap(~ sample.type)
+    )
+  }
+}
+```
+<br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br /><br />
+

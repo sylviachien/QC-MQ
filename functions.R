@@ -1,4 +1,4 @@
-# app_8 function.R
+# app10 function.R
 
 ########## Function.1 ##########################################################################################
 # x = pg, output = parsed_pg
@@ -84,10 +84,10 @@ process_pg <- function(x){
     
     parsed_pg <- parsed_pg %>% 
       mutate(contam_kind = ifelse(Contaminant!="+", "Non-Contaminant",
-                                  ifelse(Contaminant=="+" & Bos.taurus=="+" & uniq_contam=="+", "Contaminant.Bovine.Uniq",
-                                         ifelse(Contaminant=="+" & Bos.taurus=="+" & uniq_contam!="+", "Contaminant.Bovine.NonUniq",
-                                                ifelse(Contaminant=="+" & Bos.taurus!="+" & uniq_contam=="+", "Contaminant.NonBovine.Uniq",
-                                                       ifelse(Contaminant=="+" & Bos.taurus!="+" & uniq_contam!="+", "Contaminant.NonBovine.NonUniq", "NA"))))))
+                                  ifelse(Contaminant=="+" & Bos.taurus=="+" & uniq_contam=="+", "Contaminant.Bovine.Unique",
+                                         ifelse(Contaminant=="+" & Bos.taurus=="+" & uniq_contam!="+", "Contaminant.Bovine.NonUnique",
+                                                ifelse(Contaminant=="+" & Bos.taurus!="+" & uniq_contam=="+", "Contaminant.NonBovine.Unique",
+                                                       ifelse(Contaminant=="+" & Bos.taurus!="+" & uniq_contam!="+", "Contaminant.NonBovine.NonUnique", "NA"))))))
     parsed_pg <- parsed_pg %>% 
       mutate(kind_contam=ifelse(Protein.IDs=="CON__P00761","Trypsin",
                                 ifelse(Protein.IDs=="CON__P02754", "LGB(Bovine)", contam_kind))) %>% 
@@ -233,6 +233,25 @@ getSpikeInfo <- function(x, y){
 }
 
 ########## Function.6 ##########################################################################################
+# x = parsed_pg, y = raw/lfq, z = protein.IDs
+getCustomSpikeInfo <- function(x, y, z){
+  if(y=="raw"){ extract = "Intensity."}
+  if(y=="lfq"){ extract = "LFQ.intensity."}
+  #x[grepl("^P00000$", x$Protein.IDs),]
+  pname = paste0("^", z, "$")
+  s_data = x[grepl(pname, x$Protein.IDs),] %>% 
+    #s_data = x %>% filter(Protein.IDs=="P00000") %>%  
+    select(starts_with(extract))
+  data = t(s_data)
+  data = data.frame(data, sample=rownames(data))
+  colnames(data) <- c("intensity", "sample")
+  data = data %>% mutate(log2.intensity = log(intensity,2))
+  data$sample = gsub(extract,"", data$sample)
+  data = data %>% select(sample, intensity, log2.intensity)
+  return(data)
+}
+
+########## Function.7 ##########################################################################################
 # get sample with spike below mean - 2sd, x=spike_dat, output:below
 getSpikeBelow2sdSample <- function(x){
   m = mean(x$log2.intensity)
@@ -241,7 +260,7 @@ getSpikeBelow2sdSample <- function(x){
   return(below)
 }
 
-########## Function.7 ##########################################################################################
+########## Function.8 ##########################################################################################
 # get sample with spike above mean + 2sd, x=spike_dat, output:above
 getSpikeAbove2sdSample <- function(x){
   m = mean(x$log2.intensity)
@@ -256,7 +275,7 @@ getSpikeAbove2sdSample <- function(x){
 #                                                                                     #  
 #######################################################################################
 
-########## Function.8 ##########################################################################################
+########## Function.9 ##########################################################################################
 # get contaminant info, x= parsed_pg, output:raw/lfq_con_info
 getContamInfo <- function(x, y){
   if(y=="raw"){ extract = "Intensity."}
@@ -269,7 +288,7 @@ getContamInfo <- function(x, y){
   return(info)
 }
 
-########## Function.9 ##########################################################################################
+########## Function.10 ##########################################################################################
 # get contaminant table, x= raw/lfq_con_info
 getContamTable1 <- function(x){
   table = ddply(x, .(kind_contam, sample), summarise,
@@ -278,7 +297,7 @@ getContamTable1 <- function(x){
   return(table)
 }
 
-########## Function.9 ##########################################################################################
+########## Function.11 ##########################################################################################
 # get contaminant table with sample info from doe, x= raw/lfq_con_info
 getContamTable2 <- function(x, doe){
   info = x %>% 
@@ -301,7 +320,7 @@ getContamTable2 <- function(x, doe){
 #                                                                                     #  
 #######################################################################################
 
-########## Function.10 ##########################################################################################
+########## Function.12 ##########################################################################################
 # get protein count table for clean raw/lfq data, x=parsed_pg, output:prog_count
 getProteinCount <- function(x, y){
   if(y=="raw"){ extract = "Intensity."}
@@ -321,7 +340,7 @@ getProteinCount <- function(x, y){
   return(data)
 }
 
-########## Function.11 ##########################################################################################
+########## Function.13 ##########################################################################################
 # get protein count table from clean raw/lfq data with doe info, x=parsed_pg, y= raw/lfq
 getProteinCountDoe <- function(x, y, doe){
   if(y=="raw"){ extract = "Intensity."}
@@ -343,7 +362,7 @@ getProteinCountDoe <- function(x, y, doe){
   return(data)
 }
 
-########## Function.12 ##########################################################################################
+########## Function.14 ##########################################################################################
 # get expressed protein , x=parsed_pg, y=raw/lfq, output: per_data_melt_raw/lfq
 getExpressedSamplePercentPerProteinEachType <- function(x, y, doe){
   if(y=="raw"){ extract = "Intensity."}
@@ -383,7 +402,7 @@ getExpressedSamplePercentPerProteinEachType <- function(x, y, doe){
 #                                                                                     #  
 #######################################################################################
 
-########## Function.13 ##########################################################################################
+########## Function.15 ##########################################################################################
 # get peptide count from pt x=pt, output:pep_count
 getPepCount <- function(x){
   table = x %>% 
@@ -397,7 +416,7 @@ getPepCount <- function(x){
   return(data)
 }
 
-########## Function.14 ##########################################################################################
+########## Function.16 ##########################################################################################
 getPepCountDoe <- function(x, doe){
   table = x %>% 
     select(starts_with("Intensity."))
@@ -418,7 +437,7 @@ getPepCountDoe <- function(x, doe){
 #                                                                                     #  
 #######################################################################################
 
-########## Function.15 ##########################################################################################
+########## Function.17 ##########################################################################################
 # get total log2 protein intensity by individual sample x:table_log2_clean_raw/lfq
 getTotalIntensity <- function(x){
   x <- x[,6:ncol(x)]
@@ -429,7 +448,7 @@ getTotalIntensity <- function(x){
   return(data)
 }
 
-########## Function.16 ##########################################################################################
+########## Function.18 ##########################################################################################
 # get log2 protein intensities by sample,  x:table_log2_clean_raw/lfq
 getIntensity <- function(x){
   x <- x[,6:ncol(x)]
@@ -439,7 +458,7 @@ getIntensity <- function(x){
   return(data)
 }
 
-########## Function.17 ##########################################################################################
+########## Function.19 ##########################################################################################
 # get total log2 peptide intensity by individual sample, x:pt output: pep_int_sum
 getTotalIntensityPep <- function(x){
   x = x %>% 
@@ -455,7 +474,7 @@ getTotalIntensityPep <- function(x){
   return(data)
 }
 
-########## Function.18 ##########################################################################################
+########## Function.20 ##########################################################################################
 # median intensity plot:use pg_ints_raw/lfq_melt=x (table_log2_clean_r/l -> getIntensity -> melt), output:mp_raw/lfq
 getMedianIntPlotData <- function(x, doe){
   doe <- doe %>% select(sample.id, type)
@@ -495,7 +514,7 @@ getMedianIntPlotData <- function(x, doe){
 #                                                                                     #  
 #######################################################################################
 
-########## Function.19 ##########################################################################################
+########## Function.21 ##########################################################################################
 # x=table_log2_clean_raw, output=melt_table_name_raw/lfq
 getMeltwithNames <- function(x){
   names = colnames(x)
@@ -513,7 +532,7 @@ getMeltwithNames <- function(x){
   }
 }
 
-########## Function.20 ##########################################################################################
+########## Function.22 ##########################################################################################
 # x=melt_table_name_raw/lfq, output=annotated_mean_table_raw/lfq
 countMeanbyProtein <- function(x){
   data = x %>% 
@@ -529,40 +548,81 @@ countMeanbyProtein <- function(x){
   return(data)
 }
 
-########## Function.21 ##########################################################################################
+########## Function.23 ##########################################################################################
 ## top20 sample.type
-# x=melt_table_name_raw/lfq_doe output:wide_sampletype_sort_table_raw/lfq
+# x=melt_table_name_raw/lfq_doe
 countMeanbyProteinSampletypeDoe <- function(x){
+  info = x %>% select(Protein.IDs, Protein.names, Gene.names)
   data = x %>% 
-    ddply(.(Protein.IDs, sample.type),  summarise, Mean.intensity=mean(value)) %>% 
+    ddply(.(Protein.IDs, sample.type),  summarise, Mean.intensity=round(mean(value),2)) %>% 
     spread(key="sample.type", value="Mean.intensity")
-  # the columns are `Protein.IDs` and list of sample.type
-  # create separate tables for different sample.type
-  sampletype_name = colnames(data)[-1]
-  number_sampletype = ncol(data)-1
-  name_col = data %>% 
-    select(Protein.IDs) %>% 
-    left_join(x %>% select(Protein.IDs, Protein.names, Gene.names)) %>% 
+  
+  table = info %>% right_join(data) %>% 
     distinct()
-  name_col$Protein.IDs = gsub(";","; ", name_col$Protein.IDs)
-  name_col$Protein.names = gsub(";","; ", name_col$Protein.names)
-  name_col$Gene.names = gsub(";", "; ", name_col$Gene.names)
-  big_table = ""
-  for(i in 1:number_sampletype){
-    j=i+1
-    table = data.frame(name_col, data[,j])
-    sort_table = table[order(-table[,4]),]
-    big_table = data.frame(big_table, sort_table)
-  }
-  big_table <- big_table[,-1]
-  for(i in 1:number_sampletype){
-    n = i*4
-    colnames(big_table)[n] <- sampletype_name[i]
-  } 
-  return(big_table)
+
+  table$Protein.IDs = gsub(";","; ", table$Protein.IDs)
+  table$Protein.names = gsub(";","; ", table$Protein.names)
+  table$Gene.names = gsub(";", "; ", table$Gene.names)
+  
+  return(table)
 }
 
-########## Function.22 ##########################################################################################
+########## Function.25 ##########################################################################################
+## top20 type
+# x=melt_table_name_raw/lfq_doe
+countMeanbyProteinTypeDoe <- function(x){
+  info = x %>% select(Protein.IDs, Protein.names, Gene.names)
+  data = x %>% 
+    ddply(.(Protein.IDs, type),  summarise, Mean.intensity=round(mean(value),2)) %>% 
+    spread(key="type", value="Mean.intensity")
+  
+  table = info %>% right_join(data) %>% 
+    distinct()
+  
+  table$Protein.IDs = gsub(";","; ", table$Protein.IDs)
+  table$Protein.names = gsub(";","; ", table$Protein.names)
+  table$Gene.names = gsub(";", "; ", table$Gene.names)
+  
+  return(table)
+}
+
+
+
+
+########## Function.23 ##########################################################################################
+## top20 sample.type
+# x=melt_table_name_raw/lfq_doe output:wide_sampletype_sort_table_raw/lfq
+#countMeanbyProteinSampletypeDoe <- function(x){
+#  data = x %>% 
+#    ddply(.(Protein.IDs, sample.type),  summarise, Mean.intensity=mean(value)) %>% 
+#    spread(key="sample.type", value="Mean.intensity")
+#  # the columns are `Protein.IDs` and list of sample.type
+#  # create separate tables for different sample.type
+#  sampletype_name = colnames(data)[-1]
+#  number_sampletype = ncol(data)-1
+#  name_col = data %>% 
+#    select(Protein.IDs) %>% 
+#    left_join(x %>% select(Protein.IDs, Protein.names, Gene.names)) %>% 
+#    distinct()
+#  name_col$Protein.IDs = gsub(";","; ", name_col$Protein.IDs)
+#  name_col$Protein.names = gsub(";","; ", name_col$Protein.names)
+#  name_col$Gene.names = gsub(";", "; ", name_col$Gene.names)
+#  big_table = ""
+#  for(i in 1:number_sampletype){
+#    j=i+1
+#    table = data.frame(name_col, data[,j])
+#    sort_table = table[order(-table[,4]),]
+#    big_table = data.frame(big_table, sort_table)
+#  }
+#  big_table <- big_table[,-1]
+#  for(i in 1:number_sampletype){
+#    n = i*4
+#    colnames(big_table)[n] <- sampletype_name[i]
+#  } 
+#  return(big_table)
+#}
+
+########## Function.24 ##########################################################################################
 # x= wide_sampletype_sort_table_raw/lfq
 getTop20sampletypeTable <- function(x){
   number_sampletype = ncol(x)/4
@@ -590,40 +650,40 @@ getTop20sampletypeTable <- function(x){
   return(long_table)
 }
 
-########## Function.23 ##########################################################################################
+########## Function.25 ##########################################################################################
 ## top20 type
 # x=melt_table_name_raw/lfq_doe output:wide_sampletype_sort_table_raw/lfq
-countMeanbyProteinTypeDoe <- function(x){
-  data = x %>% 
-    ddply(.(Protein.IDs, type),  summarise, Mean.intensity=mean(value)) %>% 
-    spread(key="type", value="Mean.intensity")
-  # the columns are `Protein.IDs` and list of sample.type
-  # create separate tables for different sample.type
-  type_name = colnames(data)[-1]
-  number_type = ncol(data)-1
-  name_col = data %>% 
-    select(Protein.IDs) %>% 
-    left_join(x %>% select(Protein.IDs, Protein.names, Gene.names)) %>% 
-    distinct()
-  name_col$Protein.IDs = gsub(";","; ", name_col$Protein.IDs)
-  name_col$Protein.names = gsub(";","; ", name_col$Protein.names)
-  name_col$Gene.names = gsub(";", "; ", name_col$Gene.names)
-  big_table = ""
-  for(i in 1:number_type){
-    j=i+1
-    table = data.frame(name_col, data[,j])
-    sort_table = table[order(-table[,4]),]
-    big_table = data.frame(big_table, sort_table)
-  }
-  big_table <- big_table[,-1]
-  for(i in 1:number_type){
-    n = i*4
-    colnames(big_table)[n] <- type_name[i]
-  } 
-  return(big_table)
-}
+#countMeanbyProteinTypeDoe <- function(x){
+#  data = x %>% 
+#    ddply(.(Protein.IDs, type),  summarise, Mean.intensity=mean(value)) %>% 
+#    spread(key="type", value="Mean.intensity")
+#  # the columns are `Protein.IDs` and list of sample.type
+#  # create separate tables for different sample.type
+#  type_name = colnames(data)[-1]
+#  number_type = ncol(data)-1
+#  name_col = data %>% 
+#    select(Protein.IDs) %>% 
+#    left_join(x %>% select(Protein.IDs, Protein.names, Gene.names)) %>% 
+#    distinct()
+#  name_col$Protein.IDs = gsub(";","; ", name_col$Protein.IDs)
+#  name_col$Protein.names = gsub(";","; ", name_col$Protein.names)
+#  name_col$Gene.names = gsub(";", "; ", name_col$Gene.names)
+#  big_table = ""
+#  for(i in 1:number_type){
+#    j=i+1
+#    table = data.frame(name_col, data[,j])
+#    sort_table = table[order(-table[,4]),]
+#    big_table = data.frame(big_table, sort_table)
+#  }
+#  big_table <- big_table[,-1]
+#  for(i in 1:number_type){
+#    n = i*4
+#    colnames(big_table)[n] <- type_name[i]
+#  } 
+#  return(big_table)
+#}
 
-########## Function.24 ##########################################################################################
+########## Function.26 ##########################################################################################
 # x= wide_sampletype_sort_table_raw/lfq
 getTop20TypeTable <- function(x){
   number_type = ncol(x)/4
@@ -657,7 +717,7 @@ getTop20TypeTable <- function(x){
 #                                                                                     #  
 #######################################################################################
 
-########## Function.25 ##########################################################################################
+########## Function.27 ##########################################################################################
 # x = table_log2_clean_raw/lfq, output: pca_table_raw
 getPCAtable <- function(x){
   x = data.frame(t(x))
@@ -670,7 +730,7 @@ getPCAtable <- function(x){
   return(y)
 }
 
-########## Function.25 ##########################################################################################
+########## Function.28 ##########################################################################################
 # get contribution of PC1 and PC2
 # x = table_log2_clean_raw/lfq, output: pc12_table_raw, a vector with 2 elements
 getPC12Percentage <- function(x){
@@ -685,7 +745,7 @@ getPC12Percentage <- function(x){
   return(y)
 }
 
-########## Function.26 ##########################################################################################
+########## Function.29 ##########################################################################################
 # x = table_log2_clean_raw/lfq, doe
 getPCAtableDOE <- function(x, doe){
   x = data.frame(t(x))
@@ -706,7 +766,7 @@ getPCAtableDOE <- function(x, doe){
 #                                                                                     #  
 #######################################################################################
 
-########## Function.27 ##########################################################################################
+########## Function.30 ##########################################################################################
 # input x= table_log2_clean_raw/lfq, output: pvca_raw/lfq
 getPVCAresult <- function(x, doe){
   
@@ -737,40 +797,145 @@ getPVCAresult <- function(x, doe){
 #                                                                                     #  
 #######################################################################################
 
-########## Function.28 ##########################################################################################
+########## Function.31 ##########################################################################################
 # input x = table_log2_clean_raw/lfq, doe, output= qt_raw/lfq
 doQuantro <- function(x, doe){
   x = x[,-c(1:5)]
   n = ncol(x)
   x[,1:n] <- lapply(x[,1:n],as.numeric)
+  colnames(doe) <- tolower(colnames(doe))
   pdoe = doe %>% 
     arrange(sample.id)
-  d = quantro(x, groupFactor=pdoe$sample.type, useMedianNormalized=FALSE, B=1000) 
   
-  t = data.frame('Quantro_result' = c("nGroups", "nTotalSample", "quantroStat", "quantroPvaluePermutation"), 
-                 'value'= c(unname(unlist(summary(d)[1])),
-                            unname(unlist(summary(d)[2])),
-                            round(quantroStat(d),digits=4),
-                            ifelse(quantroPvalPerm(d)==0,"<0.001",round(quantroPvalPerm(d),digits=4))))
-  return(t)
+  if(length(unique(pdoe$sample.type))<2){
+    no_quantro <- "The number of 'sample.type' is less than 2, Quantro can not be applied!"
+    return(no_quantro)
+  }else{
+    d = quantro(x, groupFactor=pdoe$sample.type, useMedianNormalized=FALSE, B=1000) 
+    
+    t = data.frame('Quantro_result' = c("nGroups", "nTotalSample", "quantroStat", "quantroPvaluePermutation"), 
+                   'value'= c(unname(unlist(summary(d)[1])),
+                              unname(unlist(summary(d)[2])),
+                              round(quantroStat(d),digits=4),
+                              ifelse(quantroPvalPerm(d)==0,"<0.001",round(quantroPvalPerm(d),digits=4))))
+    return(t)
+  }
+  
 }
 
 
-########## Function.29 ##########################################################################################
+########## Function.32 ##########################################################################################
 # get anovar table from quantro result, x= table_log2_raw/lfq, output= qt_raw/lfq_a
 doQuantroAnova <- function(x, doe){
   x = x[,-c(1:5)]
   x[x==-Inf] <- 0
   n = ncol(x)
   x[,1:n] <- lapply(x[,1:n],as.numeric)
+  colnames(doe) <- tolower(colnames(doe))
   pdoe = doe %>% 
     arrange(sample.id)
-  d = quantro(x, groupFactor=pdoe$sample.type, useMedianNormalized=FALSE, B=1000) 
-  a = anova(d)
-  return(a)
+  
+  if(length(unique(pdoe$sample.type))<2){
+    no_quantro <- "The number of 'sample.type' is less than 2, Quantro can not be applied!"
+    return(no_quantro)
+  }else{
+    d = quantro(x, groupFactor=pdoe$sample.type, useMedianNormalized=FALSE, B=1000) 
+    a = anova(d)
+    return(a)
+  }
+  
 }
 
 
-#################################################################################################################
+########## Function.33 ##########################################################################################
+# input x = table_log2_clean_raw/lfq, doe, output= qt_raw/lfq
+doQuantroNoControl <- function(x, doe){
+  x = x[,-c(1:5)]
+  n = ncol(x)
+  x[,1:n] <- lapply(x[,1:n],as.numeric)
+  colnames(doe) <- tolower(colnames(doe))
+  doe$type <- tolower(doe$type)
+  
+  pdoe = doe %>% 
+    filter(type=="sample") %>% 
+    arrange(sample.id)
+  pdoe$sample.type <- factor(pdoe$sample.type)
+  
+  if(length(unique(pdoe$sample.type))<2){
+    no_quantro <- "The number of 'sample.type' is less than 2, Quantro can not be applied!"
+    return(no_quantro)
+  }else{
+    tt = as.data.frame(t(x))
+    tt$sample.id = rownames(tt)
+    m = tt %>% left_join(doe %>% select(sample.id, type)) %>% 
+      filter(type=="sample") %>% 
+      select(-type)
+    xx = as.data.frame(t(m))
+    colnames(xx) <- unlist(xx["sample.id",])
+    xxx <- as.data.frame(xx[-nrow(xx),])
+    j = ncol(xxx)
+    xxx[,1:j] <- lapply(xxx[,1:j],as.character)
+    xxx[,1:j] <- lapply(xxx[,1:j],as.double)
+    
+    d = quantro(xxx, groupFactor=pdoe$sample.type, useMedianNormalized=FALSE, B=1000) 
+    
+    t = data.frame('Quantro_result' = c("nGroups", "nTotalSample", "quantroStat", "quantroPvaluePermutation"), 
+                   'value'= c(unname(unlist(summary(d)[1])),
+                              unname(unlist(summary(d)[2])),
+                              round(quantroStat(d),digits=4),
+                              ifelse(quantroPvalPerm(d)==0,"<0.001",round(quantroPvalPerm(d),digits=4))))
+    return(t)
+  }
+  
+}
+
+
+########## Function.34 ##########################################################################################
+# get anovar table from quantro result, x= table_log2_raw/lfq, output= qt_raw/lfq_a
+doQuantroNoControlAnova <- function(x, doe){
+  x = x[,-c(1:5)]
+  n = ncol(x)
+  x[,1:n] <- lapply(x[,1:n],as.numeric)
+  colnames(doe) <- tolower(colnames(doe))
+  doe$type <- tolower(doe$type)
+  
+  pdoe = doe %>% 
+    filter(type=="sample") %>% 
+    arrange(sample.id)
+  pdoe$sample.type <- factor(pdoe$sample.type)
+  
+  if(length(unique(pdoe$sample.type))<2){
+    no_quantro <- "The number of 'sample.type' is less than 2, Quantro can not be applied!"
+    return(no_quantro)
+  }else{
+    tt = as.data.frame(t(x))
+    tt$sample.id = rownames(tt)
+    m = tt %>% left_join(doe %>% select(sample.id, type)) %>% 
+      filter(type=="sample") %>% 
+      select(-type)
+    xx = as.data.frame(t(m))
+    colnames(xx) <- unlist(xx["sample.id",])
+    xxx <- as.data.frame(xx[-nrow(xx),])
+    j = ncol(xxx)
+    xxx[,1:j] <- lapply(xxx[,1:j],as.character)
+    xxx[,1:j] <- lapply(xxx[,1:j],as.double)
+    
+    d = quantro(xxx, groupFactor=pdoe$sample.type, useMedianNormalized=FALSE, B=1000) 
+    
+    t = data.frame('Quantro_result' = c("nGroups", "nTotalSample", "quantroStat", "quantroPvaluePermutation"), 
+                   'value'= c(unname(unlist(summary(d)[1])),
+                              unname(unlist(summary(d)[2])),
+                              round(quantroStat(d),digits=4),
+                              ifelse(quantroPvalPerm(d)==0,"<0.001",round(quantroPvalPerm(d),digits=4))))
+    a = anova(d)
+    return(a)
+  }
+  
+  
+
+}
+
+
+
 # end
 
