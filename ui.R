@@ -84,6 +84,7 @@ ui <- dashboardPage(
             width = 12,
             status = "primary",
             solidHeader = TRUE,
+            collapsible = TRUE,
             h4(strong(span("Run demo QC", style = "color:red"))),
             HTML(
               paste(
