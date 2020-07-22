@@ -1,0 +1,25 @@
+sample.id	Sample.Type	Type	run.order
+1	AE010159-22	Type2	sample	1
+2	AD667889-22	Type2	sample	2
+3	AD467898-28	Type3	sample	3
+4	Reference-L	Reference	control	4
+5	AD486324-23	Type1	sample	5
+6	AD467092-28	Type1	sample	6
+7	AD467928-16	Type4	sample	7
+8	AD467897-28	Type3	sample	8
+9	Reference-G	Reference	control	9
+10	AD486564-22	Type4	sample	10
+11	E9047613-22	Type4	sample	11
+12	AD467926-22	Type2	sample	12
+13	E9047557-28	Type3	sample	13
+14	AD495178-17	Type2	sample	14
+15	AD502449-28	Type1	sample	15
+16	AD497502-29	Type1	sample	16
+17	AD153348-27	Type3	sample	17
+18	Reference-F	Reference	control	18
+19	AD167365-13	Type4	sample	19
+20	AD747301-22	Type4	sample	20
+21	E9047612-17	Type2	sample	21
+22	AD608298-28	Type3	sample	22
+23	AD308527-16	Type2	sample	23
+24	AD153349-27	Type1	sample	24

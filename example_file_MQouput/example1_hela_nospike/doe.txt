@@ -1,0 +1,11 @@
+Sample.id	Run.order	Type	Sample.type	LCMS.run	Run.id
+Hela1_Q3	1	control	Q3	170731q03_01	Hela1_Q3
+Hela2_Q3	2	control	Q3	170731q03_02	Hela2_Q3
+Hela3_Q3	3	control	Q3	170731q03_03	Hela3_Q3
+Hela4_Q3	4	control	Q3	170731q03_04	Hela4_Q3
+Hela5_Q3	5	control	Q3	170731q03_05	Hela5_Q3
+Hela1_Q9	1	sample	Q9	170801q09_01	Hela1_Q9
+Hela2_Q9	2	sample	Q9	170801q09_02	Hela2_Q9
+Hela3_Q9	3	sample	Q9	170801q09_03	Hela3_Q9
+Hela4_Q9	4	sample	Q9	170801q09_04	Hela4_Q9
+Hela5_Q9	5	sample	Q9	170801q09_05	Hela5_Q9
