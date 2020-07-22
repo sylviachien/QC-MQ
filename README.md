@@ -88,5 +88,5 @@ runApp(appDir = getwd())
 
 ## Example files from MaxQuant output
 
-Three different example datasets are included in the **QC-MQ/example_file_MQouput** folder. Users can upload the example files and set the prefix to test the app. (*note: msms.txt files are not included in this repository due to the size limitation, QC-MQ allows user running QC without uploading the msms.txt.*)
+Three different example datasets are included in the **QC-MQ/example_file_MQoutput** folder. Users can upload the example files and set the prefix to test the app. (*note: msms.txt files are not included in this repository due to the size limitation, QC-MQ allows user running QC without uploading the msms.txt.*)
 
