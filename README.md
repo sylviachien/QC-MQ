@@ -49,7 +49,7 @@ Have the input files ready and follow the instructions from the dashboard to upl
 
 ```r
 
-load.lib <- c("shiny", "shinyBS", "shinydashboard", "shinyFiles", "colorspace", "tools", "shinyjs", "pvca", "Biobase", "ggthemes", "ggplot2", "scales", "shinyWidgets", "shinyalert", "reshape2", "stringr", "reshape2", "quantro", "plyr", "tidyr", "plotly", "dplyr")
+load.lib <- c("shiny", "rmarkdown", "shinyBS", "shinydashboard", "shinyFiles", "colorspace", "tools", "shinyjs", "pvca", "Biobase", "ggthemes", "ggplot2", "scales", "shinyWidgets", "shinyalert", "reshape2", "stringr", "quantro", "plyr", "tidyr", "plotly", "dplyr")
 install.lib <- load.lib[!load.lib %in% installed.packages()]
 for(lib in install.lib) install.packages(lib, dependencies=TRUE)
 sapply(load.lib, require, character=TRUE)
