@@ -19,7 +19,7 @@ useShinyalert()
 useSweetAlert()
 
 # add logo along with the title in the header
-head <- tags$a(href="https://report.pri.bms.com/QC-MQ/",
+head <- tags$a(
                tags$img(src="logo1.png", height=80, width=80), 
                "Quality Control Dashboard for MaxQuant Proteomics Data", target="_blank")
 
